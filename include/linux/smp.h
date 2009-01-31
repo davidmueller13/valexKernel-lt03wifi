@@ -226,6 +226,12 @@ static inline void kick_all_cpus_sync(void) { }
  */
 extern void arch_disable_smp_support(void);
 
+/*
+ * Callback to arch code if there's nosmp or maxcpus=0 on the
+ * boot command line:
+ */
+extern void arch_disable_smp_support(void);
+
 void smp_setup_processor_id(void);
 
 #endif /* __LINUX_SMP_H */
