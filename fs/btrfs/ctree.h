@@ -3032,6 +3032,16 @@ do {									\
 	BUG_ON(!(_i->mount_opt & BTRFS_MOUNT_PANIC_ON_FATAL_ERROR));	\
 } while (0)
 
+void __btrfs_panic(struct btrfs_fs_info *fs_info, const char *function,
+		   unsigned int line, int errno, const char *fmt, ...);
+
+#define btrfs_panic(fs_info, errno, fmt, args...)			\
+do {									\
+	struct btrfs_fs_info *_i = (fs_info);				\
+	__btrfs_panic(_i, __func__, __LINE__, errno, fmt, ##args);	\
+	BUG_ON(!(_i->mount_opt & BTRFS_MOUNT_PANIC_ON_FATAL_ERROR));	\
+} while (0)
+
 /* acl.c */
 #ifdef CONFIG_BTRFS_FS_POSIX_ACL
 struct posix_acl *btrfs_get_acl(struct inode *inode, int type);

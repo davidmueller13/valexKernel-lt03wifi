@@ -257,6 +257,36 @@ void __btrfs_panic(struct btrfs_fs_info *fs_info, const char *function,
 	/* Caller calls BUG() */
 }
 
+/*
+ * __btrfs_panic decodes unexpected, fatal errors from the caller,
+ * issues an alert, and either panics or BUGs, depending on mount options.
+ */
+void __btrfs_panic(struct btrfs_fs_info *fs_info, const char *function,
+		   unsigned int line, int errno, const char *fmt, ...)
+{
+	char nbuf[16];
+	char *s_id = "<unknown>";
+	const char *errstr;
+	struct va_format vaf = { .fmt = fmt };
+	va_list args;
+
+	if (fs_info)
+		s_id = fs_info->sb->s_id;
+
+	va_start(args, fmt);
+	vaf.va = &args;
+
+	errstr = btrfs_decode_error(fs_info, errno, nbuf);
+	if (fs_info->mount_opt & BTRFS_MOUNT_PANIC_ON_FATAL_ERROR)
+		panic(KERN_CRIT "BTRFS panic (device %s) in %s:%d: %pV (%s)\n",
+			s_id, function, line, &vaf, errstr);
+
+	printk(KERN_CRIT "BTRFS panic (device %s) in %s:%d: %pV (%s)\n",
+	       s_id, function, line, &vaf, errstr);
+	va_end(args);
+	/* Caller calls BUG() */
+}
+
 static void btrfs_put_super(struct super_block *sb)
 {
 	(void)close_ctree(btrfs_sb(sb)->tree_root);
