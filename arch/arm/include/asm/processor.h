@@ -139,6 +139,8 @@ static inline void prefetchw(const void *ptr)
 
 #define HAVE_ARCH_PICK_MMAP_LAYOUT
 
+#define HAVE_ARCH_PICK_MMAP_LAYOUT
+
 #endif
 
 #endif /* __ASM_ARM_PROCESSOR_H */
