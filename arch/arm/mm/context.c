@@ -77,7 +77,7 @@ void a15_erratum_get_cpumask(int this_cpu, struct mm_struct *mm,
 #endif
 
 #ifdef CONFIG_ARM_LPAE
-static void cpu_set_reserved_ttbr0(void)
+void cpu_set_reserved_ttbr0(void)
 {
 	unsigned long ttbl = __pa(swapper_pg_dir);
 	unsigned long ttbh = 0;
@@ -93,7 +93,7 @@ static void cpu_set_reserved_ttbr0(void)
 	isb();
 }
 #else
-static void cpu_set_reserved_ttbr0(void)
+void cpu_set_reserved_ttbr0(void)
 {
 	u32 ttb;
 	/* Copy TTBR1 into TTBR0 */
