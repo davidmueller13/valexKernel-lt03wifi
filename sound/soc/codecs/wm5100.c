@@ -2448,7 +2448,7 @@ static __devinit int wm5100_i2c_probe(struct i2c_client *i2c,
 
 	wm5100->dev = &i2c->dev;
 
-	wm5100->regmap = regmap_init_i2c(i2c, &wm5100_regmap);
+	wm5100->regmap = devm_regmap_init_i2c(i2c, &wm5100_regmap);
 	if (IS_ERR(wm5100->regmap)) {
 		ret = PTR_ERR(wm5100->regmap);
 		dev_err(&i2c->dev, "Failed to allocate register map: %d\n",
@@ -2473,7 +2473,7 @@ static __devinit int wm5100_i2c_probe(struct i2c_client *i2c,
 	if (ret != 0) {
 		dev_err(&i2c->dev, "Failed to request core supplies: %d\n",
 			ret);
-		goto err_regmap;
+		goto err;
 	}
 
 	ret = regulator_bulk_enable(ARRAY_SIZE(wm5100->core_supplies),
@@ -2481,7 +2481,7 @@ static __devinit int wm5100_i2c_probe(struct i2c_client *i2c,
 	if (ret != 0) {
 		dev_err(&i2c->dev, "Failed to enable core supplies: %d\n",
 			ret);
-		goto err_regmap;
+		goto err;
 	}
 
 	if (wm5100->pdata.ldo_ena) {
@@ -2654,8 +2654,6 @@ err_ldo:
 err_enable:
 	regulator_bulk_disable(ARRAY_SIZE(wm5100->core_supplies),
 			       wm5100->core_supplies);
-err_regmap:
-	regmap_exit(wm5100->regmap);
 err:
 	return ret;
 }
@@ -2676,7 +2674,6 @@ static __devexit int wm5100_i2c_remove(struct i2c_client *i2c)
 		gpio_set_value_cansleep(wm5100->pdata.ldo_ena, 0);
 		gpio_free(wm5100->pdata.ldo_ena);
 	}
-	regmap_exit(wm5100->regmap);
 
 	return 0;
 }
