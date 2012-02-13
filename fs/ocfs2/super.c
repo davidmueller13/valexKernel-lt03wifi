@@ -1168,6 +1168,7 @@ static int ocfs2_fill_super(struct super_block *sb, void *data, int silent)
 
 	root = d_make_root(inode);
 	if (!root) {
+		iput(inode);
 		status = -ENOMEM;
 		mlog_errno(status);
 		goto read_super_error;
