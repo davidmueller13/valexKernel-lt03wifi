@@ -146,6 +146,7 @@ cifs_read_super(struct super_block *sb)
 	sb->s_root = d_make_root(inode);
 	if (!sb->s_root) {
 		rc = -ENOMEM;
+		iput(inode);
 		goto out_no_root;
 	}
 
