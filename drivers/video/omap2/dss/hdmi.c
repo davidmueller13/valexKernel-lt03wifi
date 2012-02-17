@@ -771,7 +771,7 @@ static void hdmi_put_clocks(void)
 }
 
 /* HDMI HW IP initialisation */
-static int omapdss_hdmihw_probe(struct platform_device *pdev)
+static int __init omapdss_hdmihw_probe(struct platform_device *pdev)
 {
 	struct resource *hdmi_mem;
 	int r;
@@ -825,7 +825,7 @@ static int omapdss_hdmihw_probe(struct platform_device *pdev)
 	return 0;
 }
 
-static int omapdss_hdmihw_remove(struct platform_device *pdev)
+static int __exit omapdss_hdmihw_remove(struct platform_device *pdev)
 {
 	hdmi_panel_exit();
 
@@ -871,7 +871,7 @@ static const struct dev_pm_ops hdmi_pm_ops = {
 };
 
 static struct platform_driver omapdss_hdmihw_driver = {
-	.remove         = omapdss_hdmihw_remove,
+	.remove         = __exit_p(omapdss_hdmihw_remove),
 	.driver         = {
 		.name   = "omapdss_hdmi",
 		.owner  = THIS_MODULE,
@@ -879,12 +879,12 @@ static struct platform_driver omapdss_hdmihw_driver = {
 	},
 };
 
-int hdmi_init_platform_driver(void)
+int __init hdmi_init_platform_driver(void)
 {
 	return platform_driver_probe(&omapdss_hdmihw_driver, omapdss_hdmihw_probe);
 }
 
-void hdmi_uninit_platform_driver(void)
+void __exit hdmi_uninit_platform_driver(void)
 {
 	platform_driver_unregister(&omapdss_hdmihw_driver);
 }

@@ -780,7 +780,7 @@ static void venc_put_clocks(void)
 }
 
 /* VENC HW IP initialisation */
-static int omap_venchw_probe(struct platform_device *pdev)
+static int __init omap_venchw_probe(struct platform_device *pdev)
 {
 	u8 rev_id;
 	struct resource *venc_mem;
@@ -835,7 +835,7 @@ err_runtime_get:
 	return r;
 }
 
-static int omap_venchw_remove(struct platform_device *pdev)
+static int __exit omap_venchw_remove(struct platform_device *pdev)
 {
 	if (venc.vdda_dac_reg != NULL) {
 		regulator_put(venc.vdda_dac_reg);
@@ -879,7 +879,7 @@ static const struct dev_pm_ops venc_pm_ops = {
 };
 
 static struct platform_driver omap_venchw_driver = {
-	.remove         = omap_venchw_remove,
+	.remove         = __exit_p(omap_venchw_remove),
 	.driver         = {
 		.name   = "omapdss_venc",
 		.owner  = THIS_MODULE,
@@ -887,7 +887,7 @@ static struct platform_driver omap_venchw_driver = {
 	},
 };
 
-int venc_init_platform_driver(void)
+int __init venc_init_platform_driver(void)
 {
 	if (cpu_is_omap44xx())
 		return 0;
@@ -895,7 +895,7 @@ int venc_init_platform_driver(void)
 	return platform_driver_probe(&omap_venchw_driver, omap_venchw_probe);
 }
 
-void venc_uninit_platform_driver(void)
+void __exit venc_uninit_platform_driver(void)
 {
 	if (cpu_is_omap44xx())
 		return;
