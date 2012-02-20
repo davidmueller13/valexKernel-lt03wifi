@@ -913,6 +913,15 @@ static int dw_mci_idmac_init(struct dw_mci *host)
 	return 0;
 }
 
+static struct dw_mci_dma_ops dw_mci_idmac_ops = {
+	.init = dw_mci_idmac_init,
+	.start = dw_mci_idmac_start_dma,
+	.stop = dw_mci_idmac_stop_dma,
+	.complete = dw_mci_idmac_complete_dma,
+	.cleanup = dw_mci_dma_cleanup,
+};
+#endif /* CONFIG_MMC_DW_IDMAC */
+
 static int dw_mci_pre_dma_transfer(struct dw_mci *host,
 				   struct mmc_data *data,
 				   bool next)
