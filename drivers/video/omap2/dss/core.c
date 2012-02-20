@@ -87,6 +87,51 @@ struct regulator *dss_get_vdds_sdi(void)
 	return reg;
 }
 
+int dss_get_ctx_loss_count(struct device *dev)
+{
+	struct omap_dss_board_info *board_data = core.pdev->dev.platform_data;
+	int cnt;
+
+	if (!board_data->get_context_loss_count)
+		return -ENOENT;
+
+	cnt = board_data->get_context_loss_count(dev);
+
+	WARN_ONCE(cnt < 0, "get_context_loss_count failed: %d\n", cnt);
+
+	return cnt;
+}
+
+int dss_dsi_enable_pads(int dsi_id, unsigned lane_mask)
+{
+	struct omap_dss_board_info *board_data = core.pdev->dev.platform_data;
+
+	if (!board_data->dsi_enable_pads)
+		return -ENOENT;
+
+	return board_data->dsi_enable_pads(dsi_id, lane_mask);
+}
+
+void dss_dsi_disable_pads(int dsi_id, unsigned lane_mask)
+{
+	struct omap_dss_board_info *board_data = core.pdev->dev.platform_data;
+
+	if (!board_data->dsi_enable_pads)
+		return;
+
+	return board_data->dsi_disable_pads(dsi_id, lane_mask);
+}
+
+int dss_set_min_bus_tput(struct device *dev, unsigned long tput)
+{
+	struct omap_dss_board_info *pdata = core.pdev->dev.platform_data;
+
+	if (pdata->set_min_bus_tput)
+		return pdata->set_min_bus_tput(dev, tput);
+	else
+		return 0;
+}
+
 #if defined(CONFIG_DEBUG_FS) && defined(CONFIG_OMAP2_DSS_DEBUG_SUPPORT)
 static int dss_debug_show(struct seq_file *s, void *unused)
 {
@@ -381,6 +426,8 @@ int omap_dss_register_driver(struct omap_dss_driver *dssdriver)
 	if (dssdriver->get_recommended_bpp == NULL)
 		dssdriver->get_recommended_bpp =
 			omapdss_default_get_recommended_bpp;
+	if (dssdriver->get_timings == NULL)
+		dssdriver->get_timings = omapdss_default_get_timings;
 
 	return driver_register(&dssdriver->driver);
 }
