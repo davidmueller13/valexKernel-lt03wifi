@@ -437,6 +437,11 @@ static void drm_unplug_minor(struct drm_minor *minor)
 	drm_sysfs_device_remove(minor);
 }
 
+static void drm_unplug_minor(struct drm_minor *minor)
+{
+	drm_sysfs_device_remove(minor);
+}
+
 /**
  * Called via drm_exit() at module unload time or when pci device is
  * unplugged.
