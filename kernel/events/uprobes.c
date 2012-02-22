@@ -1,5 +1,5 @@
 /*
- * Userspace Probes (UProbes)
+ * User-space Probes (UProbes)
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -29,24 +29,26 @@
 #include <linux/rmap.h>		/* anon_vma_prepare */
 #include <linux/mmu_notifier.h>	/* set_pte_at_notify */
 #include <linux/swap.h>		/* try_to_free_swap */
+
 #include <linux/uprobes.h>
 
 static struct rb_root uprobes_tree = RB_ROOT;
+
 static DEFINE_SPINLOCK(uprobes_treelock);	/* serialize rbtree access */
 
 #define UPROBES_HASH_SZ	13
+
 /* serialize (un)register */
 static struct mutex uprobes_mutex[UPROBES_HASH_SZ];
-#define uprobes_hash(v)	(&uprobes_mutex[((unsigned long)(v)) %\
-						UPROBES_HASH_SZ])
+
+#define uprobes_hash(v)		(&uprobes_mutex[((unsigned long)(v)) % UPROBES_HASH_SZ])
 
 /* serialize uprobe->pending_list */
 static struct mutex uprobes_mmap_mutex[UPROBES_HASH_SZ];
-#define uprobes_mmap_hash(v)	(&uprobes_mmap_mutex[((unsigned long)(v)) %\
-						UPROBES_HASH_SZ])
+#define uprobes_mmap_hash(v)	(&uprobes_mmap_mutex[((unsigned long)(v)) % UPROBES_HASH_SZ])
 
 /*
- * uprobe_events allows us to skip the mmap_uprobe if there are no uprobe
+ * uprobe_events allows us to skip the uprobe_mmap if there are no uprobe
  * events active at this time.  Probably a fine grained per inode count is
  * better?
  */
@@ -58,9 +60,21 @@ static atomic_t uprobe_events = ATOMIC_INIT(0);
  * vm_area_struct wasnt recommended.
  */
 struct vma_info {
-	struct list_head probe_list;
-	struct mm_struct *mm;
-	loff_t vaddr;
+	struct list_head	probe_list;
+	struct mm_struct	*mm;
+	loff_t			vaddr;
+};
+
+struct uprobe {
+	struct rb_node		rb_node;	/* node in the rb tree */
+	atomic_t		ref;
+	struct rw_semaphore	consumer_rwsem;
+	struct list_head	pending_list;
+	struct uprobe_consumer	*consumers;
+	struct inode		*inode;		/* Also hold a ref to inode */
+	loff_t			offset;
+	int			flags;
+	struct arch_uprobe	arch;
 };
 
 /*
@@ -79,8 +93,7 @@ static bool valid_vma(struct vm_area_struct *vma, bool is_register)
 	if (!is_register)
 		return true;
 
-	if ((vma->vm_flags & (VM_READ|VM_WRITE|VM_EXEC|VM_SHARED)) ==
-						(VM_READ|VM_EXEC))
+	if ((vma->vm_flags & (VM_READ|VM_WRITE|VM_EXEC|VM_SHARED)) == (VM_READ|VM_EXEC))
 		return true;
 
 	return false;
@@ -92,6 +105,7 @@ static loff_t vma_address(struct vm_area_struct *vma, loff_t offset)
 
 	vaddr = vma->vm_start + offset;
 	vaddr -= vma->vm_pgoff << PAGE_SHIFT;
+
 	return vaddr;
 }
 
@@ -105,8 +119,7 @@ static loff_t vma_address(struct vm_area_struct *vma, loff_t offset)
  *
  * Returns 0 on success, -EFAULT on failure.
  */
-static int __replace_page(struct vm_area_struct *vma, struct page *page,
-					struct page *kpage)
+static int __replace_page(struct vm_area_struct *vma, struct page *page, struct page *kpage)
 {
 	struct mm_struct *mm = vma->vm_mm;
 	pgd_t *pgd;
@@ -163,7 +176,7 @@ out:
  */
 bool __weak is_bkpt_insn(uprobe_opcode_t *insn)
 {
-	return (*insn == UPROBES_BKPT_INSN);
+	return *insn == UPROBES_BKPT_INSN;
 }
 
 /*
@@ -179,7 +192,7 @@ bool __weak is_bkpt_insn(uprobe_opcode_t *insn)
 /*
  * write_opcode - write the opcode at a given virtual address.
  * @mm: the probed process address space.
- * @uprobe: the breakpointing information.
+ * @arch_uprobe: the breakpointing information.
  * @vaddr: the virtual address to store the opcode.
  * @opcode: opcode to be written at @vaddr.
  *
@@ -189,13 +202,14 @@ bool __weak is_bkpt_insn(uprobe_opcode_t *insn)
  * For mm @mm, write the opcode at @vaddr.
  * Return 0 (success) or a negative errno.
  */
-static int write_opcode(struct mm_struct *mm, struct uprobe *uprobe,
+static int write_opcode(struct mm_struct *mm, struct arch_uprobe *auprobe,
 			unsigned long vaddr, uprobe_opcode_t opcode)
 {
 	struct page *old_page, *new_page;
 	struct address_space *mapping;
 	void *vaddr_old, *vaddr_new;
 	struct vm_area_struct *vma;
+	struct uprobe *uprobe;
 	loff_t addr;
 	int ret;
 
@@ -203,6 +217,7 @@ static int write_opcode(struct mm_struct *mm, struct uprobe *uprobe,
 	ret = get_user_pages(NULL, mm, vaddr, 1, 0, 0, &old_page, &vma);
 	if (ret <= 0)
 		return ret;
+
 	ret = -EINVAL;
 
 	/*
@@ -214,6 +229,7 @@ static int write_opcode(struct mm_struct *mm, struct uprobe *uprobe,
 	if (!valid_vma(vma, is_bkpt_insn(&opcode)))
 		goto put_out;
 
+	uprobe = container_of(auprobe, struct uprobe, arch);
 	mapping = uprobe->inode->i_mapping;
 	if (mapping != vma->vm_file->f_mapping)
 		goto put_out;
@@ -239,6 +255,7 @@ static int write_opcode(struct mm_struct *mm, struct uprobe *uprobe,
 	vaddr_new = kmap_atomic(new_page);
 
 	memcpy(vaddr_new, vaddr_old, PAGE_SIZE);
+
 	/* poke the new insn in, ASSUMES we don't cross page boundary */
 	vaddr &= ~PAGE_MASK;
 	BUG_ON(vaddr + UPROBES_BKPT_INSN_SIZE > PAGE_SIZE);
@@ -260,7 +277,8 @@ unlock_out:
 	page_cache_release(new_page);
 
 put_out:
-	put_page(old_page);	/* we did a get_page in the beginning */
+	put_page(old_page);
+
 	return ret;
 }
 
@@ -276,8 +294,7 @@ put_out:
  * For mm @mm, read the opcode at @vaddr and store it in @opcode.
  * Return 0 (success) or a negative errno.
  */
-static int read_opcode(struct mm_struct *mm, unsigned long vaddr,
-						uprobe_opcode_t *opcode)
+static int read_opcode(struct mm_struct *mm, unsigned long vaddr, uprobe_opcode_t *opcode)
 {
 	struct page *page;
 	void *vaddr_new;
@@ -293,15 +310,18 @@ static int read_opcode(struct mm_struct *mm, unsigned long vaddr,
 	memcpy(opcode, vaddr_new + vaddr, UPROBES_BKPT_INSN_SIZE);
 	kunmap_atomic(vaddr_new);
 	unlock_page(page);
-	put_page(page);		/* we did a get_user_pages in the beginning */
+
+	put_page(page);
+
 	return 0;
 }
 
 static int is_bkpt_at_addr(struct mm_struct *mm, unsigned long vaddr)
 {
 	uprobe_opcode_t opcode;
-	int result = read_opcode(mm, vaddr, &opcode);
+	int result;
 
+	result = read_opcode(mm, vaddr, &opcode);
 	if (result)
 		return result;
 
@@ -320,18 +340,18 @@ static int is_bkpt_at_addr(struct mm_struct *mm, unsigned long vaddr)
  * For mm @mm, store the breakpoint instruction at @vaddr.
  * Return 0 (success) or a negative errno.
  */
-int __weak set_bkpt(struct mm_struct *mm, struct uprobe *uprobe,
-						unsigned long vaddr)
+int __weak set_bkpt(struct mm_struct *mm, struct arch_uprobe *auprobe, unsigned long vaddr)
 {
-	int result = is_bkpt_at_addr(mm, vaddr);
+	int result;
 
+	result = is_bkpt_at_addr(mm, vaddr);
 	if (result == 1)
 		return -EEXIST;
 
 	if (result)
 		return result;
 
-	return write_opcode(mm, uprobe, vaddr, UPROBES_BKPT_INSN);
+	return write_opcode(mm, auprobe, vaddr, UPROBES_BKPT_INSN);
 }
 
 /**
@@ -344,35 +364,35 @@ int __weak set_bkpt(struct mm_struct *mm, struct uprobe *uprobe,
  * For mm @mm, restore the original opcode (opcode) at @vaddr.
  * Return 0 (success) or a negative errno.
  */
-int __weak set_orig_insn(struct mm_struct *mm, struct uprobe *uprobe,
-					unsigned long vaddr, bool verify)
+int __weak
+set_orig_insn(struct mm_struct *mm, struct arch_uprobe *auprobe, unsigned long vaddr, bool verify)
 {
 	if (verify) {
-		int result = is_bkpt_at_addr(mm, vaddr);
+		int result;
 
+		result = is_bkpt_at_addr(mm, vaddr);
 		if (!result)
 			return -EINVAL;
 
 		if (result != 1)
 			return result;
 	}
-	return write_opcode(mm, uprobe, vaddr,
-				*(uprobe_opcode_t *)uprobe->insn);
+	return write_opcode(mm, auprobe, vaddr, *(uprobe_opcode_t *)auprobe->insn);
 }
 
 static int match_uprobe(struct uprobe *l, struct uprobe *r)
 {
 	if (l->inode < r->inode)
 		return -1;
+
 	if (l->inode > r->inode)
 		return 1;
-	else {
-		if (l->offset < r->offset)
-			return -1;
 
-		if (l->offset > r->offset)
-			return 1;
-	}
+	if (l->offset < r->offset)
+		return -1;
+
+	if (l->offset > r->offset)
+		return 1;
 
 	return 0;
 }
@@ -391,6 +411,7 @@ static struct uprobe *__find_uprobe(struct inode *inode, loff_t offset)
 			atomic_inc(&uprobe->ref);
 			return uprobe;
 		}
+
 		if (match < 0)
 			n = n->rb_left;
 		else
@@ -411,6 +432,7 @@ static struct uprobe *find_uprobe(struct inode *inode, loff_t offset)
 	spin_lock_irqsave(&uprobes_treelock, flags);
 	uprobe = __find_uprobe(inode, offset);
 	spin_unlock_irqrestore(&uprobes_treelock, flags);
+
 	return uprobe;
 }
 
@@ -436,16 +458,18 @@ static struct uprobe *__insert_uprobe(struct uprobe *uprobe)
 			p = &parent->rb_right;
 
 	}
+
 	u = NULL;
 	rb_link_node(&uprobe->rb_node, parent, p);
 	rb_insert_color(&uprobe->rb_node, &uprobes_tree);
 	/* get access + creation ref */
 	atomic_set(&uprobe->ref, 2);
+
 	return u;
 }
 
 /*
- * Acquires uprobes_treelock.
+ * Acquire uprobes_treelock.
  * Matching uprobe already exists in rbtree;
  *	increment (access refcount) and return the matching uprobe.
  *
@@ -460,6 +484,7 @@ static struct uprobe *insert_uprobe(struct uprobe *uprobe)
 	spin_lock_irqsave(&uprobes_treelock, flags);
 	u = __insert_uprobe(uprobe);
 	spin_unlock_irqrestore(&uprobes_treelock, flags);
+
 	return u;
 }
 
@@ -490,19 +515,22 @@ static struct uprobe *alloc_uprobe(struct inode *inode, loff_t offset)
 		kfree(uprobe);
 		uprobe = cur_uprobe;
 		iput(inode);
-	} else
+	} else {
 		atomic_inc(&uprobe_events);
+	}
+
 	return uprobe;
 }
 
 /* Returns the previous consumer */
-static struct uprobe_consumer *add_consumer(struct uprobe *uprobe,
-				struct uprobe_consumer *consumer)
+static struct uprobe_consumer *
+consumer_add(struct uprobe *uprobe, struct uprobe_consumer *consumer)
 {
 	down_write(&uprobe->consumer_rwsem);
 	consumer->next = uprobe->consumers;
 	uprobe->consumers = consumer;
 	up_write(&uprobe->consumer_rwsem);
+
 	return consumer->next;
 }
 
@@ -511,8 +539,7 @@ static struct uprobe_consumer *add_consumer(struct uprobe *uprobe,
  * Return true if the @consumer is deleted successfully
  * or return false.
  */
-static bool del_consumer(struct uprobe *uprobe,
-				struct uprobe_consumer *consumer)
+static bool consumer_del(struct uprobe *uprobe, struct uprobe_consumer *consumer)
 {
 	struct uprobe_consumer **con;
 	bool ret = false;
@@ -526,6 +553,7 @@ static bool del_consumer(struct uprobe *uprobe,
 		}
 	}
 	up_write(&uprobe->consumer_rwsem);
+
 	return ret;
 }
 
@@ -557,15 +585,15 @@ static int __copy_insn(struct address_space *mapping,
 	memcpy(insn, vaddr + off1, nbytes);
 	kunmap_atomic(vaddr);
 	page_cache_release(page);
+
 	return 0;
 }
 
-static int copy_insn(struct uprobe *uprobe, struct vm_area_struct *vma,
-					unsigned long addr)
+static int copy_insn(struct uprobe *uprobe, struct vm_area_struct *vma, unsigned long addr)
 {
 	struct address_space *mapping;
-	int bytes;
 	unsigned long nbytes;
+	int bytes;
 
 	addr &= ~PAGE_MASK;
 	nbytes = PAGE_SIZE - addr;
@@ -579,13 +607,13 @@ static int copy_insn(struct uprobe *uprobe, struct vm_area_struct *vma,
 
 	/* Instruction at the page-boundary; copy bytes in second page */
 	if (nbytes < bytes) {
-		if (__copy_insn(mapping, vma, uprobe->insn + nbytes,
+		if (__copy_insn(mapping, vma, uprobe->arch.insn + nbytes,
 				bytes - nbytes, uprobe->offset + nbytes))
 			return -ENOMEM;
 
 		bytes = nbytes;
 	}
-	return __copy_insn(mapping, vma, uprobe->insn, bytes, uprobe->offset);
+	return __copy_insn(mapping, vma, uprobe->arch.insn, bytes, uprobe->offset);
 }
 
 static int install_breakpoint(struct mm_struct *mm, struct uprobe *uprobe,
@@ -605,29 +633,29 @@ static int install_breakpoint(struct mm_struct *mm, struct uprobe *uprobe,
 		return -EEXIST;
 
 	addr = (unsigned long)vaddr;
+
 	if (!(uprobe->flags & UPROBES_COPY_INSN)) {
 		ret = copy_insn(uprobe, vma, addr);
 		if (ret)
 			return ret;
 
-		if (is_bkpt_insn((uprobe_opcode_t *)uprobe->insn))
+		if (is_bkpt_insn((uprobe_opcode_t *)uprobe->arch.insn))
 			return -EEXIST;
 
-		ret = analyze_insn(mm, uprobe);
+		ret = arch_uprobes_analyze_insn(mm, &uprobe->arch);
 		if (ret)
 			return ret;
 
 		uprobe->flags |= UPROBES_COPY_INSN;
 	}
-	ret = set_bkpt(mm, uprobe, addr);
+	ret = set_bkpt(mm, &uprobe->arch, addr);
 
 	return ret;
 }
 
-static void remove_breakpoint(struct mm_struct *mm, struct uprobe *uprobe,
-							loff_t vaddr)
+static void remove_breakpoint(struct mm_struct *mm, struct uprobe *uprobe, loff_t vaddr)
 {
-	set_orig_insn(mm, uprobe, (unsigned long)vaddr, true);
+	set_orig_insn(mm, &uprobe->arch, (unsigned long)vaddr, true);
 }
 
 static void delete_uprobe(struct uprobe *uprobe)
@@ -649,9 +677,11 @@ static struct vma_info *__find_next_vma_info(struct list_head *head,
 	struct prio_tree_iter iter;
 	struct vm_area_struct *vma;
 	struct vma_info *tmpvi;
-	loff_t vaddr;
-	unsigned long pgoff = offset >> PAGE_SHIFT;
+	unsigned long pgoff;
 	int existing_vma;
+	loff_t vaddr;
+
+	pgoff = offset >> PAGE_SHIFT;
 
 	vma_prio_tree_foreach(vma, &iter, &mapping->i_mmap, pgoff, pgoff) {
 		if (!valid_vma(vma, is_register))
@@ -659,6 +689,7 @@ static struct vma_info *__find_next_vma_info(struct list_head *head,
 
 		existing_vma = 0;
 		vaddr = vma_address(vma, offset);
+
 		list_for_each_entry(tmpvi, head, probe_list) {
 			if (tmpvi->mm == vma->vm_mm && tmpvi->vaddr == vaddr) {
 				existing_vma = 1;
@@ -670,14 +701,15 @@ static struct vma_info *__find_next_vma_info(struct list_head *head,
 		 * Another vma needs a probe to be installed. However skip
 		 * installing the probe if the vma is about to be unlinked.
 		 */
-		if (!existing_vma &&
-				atomic_inc_not_zero(&vma->vm_mm->mm_users)) {
+		if (!existing_vma && atomic_inc_not_zero(&vma->vm_mm->mm_users)) {
 			vi->mm = vma->vm_mm;
 			vi->vaddr = vaddr;
 			list_add(&vi->probe_list, head);
+
 			return vi;
 		}
 	}
+
 	return NULL;
 }
 
@@ -685,11 +717,12 @@ static struct vma_info *__find_next_vma_info(struct list_head *head,
  * Iterate in the rmap prio tree  and find a vma where a probe has not
  * yet been inserted.
  */
-static struct vma_info *find_next_vma_info(struct list_head *head,
-			loff_t offset, struct address_space *mapping,
-			bool is_register)
+static struct vma_info *
+find_next_vma_info(struct list_head *head, loff_t offset, struct address_space *mapping,
+		   bool is_register)
 {
 	struct vma_info *vi, *retvi;
+
 	vi = kzalloc(sizeof(struct vma_info), GFP_KERNEL);
 	if (!vi)
 		return ERR_PTR(-ENOMEM);
@@ -700,6 +733,7 @@ static struct vma_info *find_next_vma_info(struct list_head *head,
 
 	if (!retvi)
 		kfree(vi);
+
 	return retvi;
 }
 
@@ -711,16 +745,23 @@ static int register_for_each_vma(struct uprobe *uprobe, bool is_register)
 	struct vma_info *vi, *tmpvi;
 	struct mm_struct *mm;
 	loff_t vaddr;
-	int ret = 0;
+	int ret;
 
 	mapping = uprobe->inode->i_mapping;
 	INIT_LIST_HEAD(&try_list);
-	while ((vi = find_next_vma_info(&try_list, uprobe->offset,
-					mapping, is_register)) != NULL) {
+
+	ret = 0;
+
+	for (;;) {
+		vi = find_next_vma_info(&try_list, uprobe->offset, mapping, is_register);
+		if (!vi)
+			break;
+
 		if (IS_ERR(vi)) {
 			ret = PTR_ERR(vi);
 			break;
 		}
+
 		mm = vi->mm;
 		down_read(&mm->mmap_sem);
 		vma = find_vma(mm, (unsigned long)vi->vaddr);
@@ -755,19 +796,21 @@ static int register_for_each_vma(struct uprobe *uprobe, bool is_register)
 				break;
 		}
 	}
+
 	list_for_each_entry_safe(vi, tmpvi, &try_list, probe_list) {
 		list_del(&vi->probe_list);
 		kfree(vi);
 	}
+
 	return ret;
 }
 
-static int __register_uprobe(struct uprobe *uprobe)
+static int __uprobe_register(struct uprobe *uprobe)
 {
 	return register_for_each_vma(uprobe, true);
 }
 
-static void __unregister_uprobe(struct uprobe *uprobe)
+static void __uprobe_unregister(struct uprobe *uprobe)
 {
 	if (!register_for_each_vma(uprobe, false))
 		delete_uprobe(uprobe);
@@ -776,15 +819,15 @@ static void __unregister_uprobe(struct uprobe *uprobe)
 }
 
 /*
- * register_uprobe - register a probe
+ * uprobe_register - register a probe
  * @inode: the file in which the probe has to be placed.
  * @offset: offset from the start of the file.
  * @consumer: information on howto handle the probe..
  *
- * Apart from the access refcount, register_uprobe() takes a creation
+ * Apart from the access refcount, uprobe_register() takes a creation
  * refcount (thro alloc_uprobe) if and only if this @uprobe is getting
  * inserted into the rbtree (i.e first consumer for a @inode:@offset
- * tuple).  Creation refcount stops unregister_uprobe from freeing the
+ * tuple).  Creation refcount stops uprobe_unregister from freeing the
  * @uprobe even before the register operation is complete. Creation
  * refcount is released when the last @consumer for the @uprobe
  * unregisters.
@@ -792,28 +835,29 @@ static void __unregister_uprobe(struct uprobe *uprobe)
  * Return errno if it cannot successully install probes
  * else return 0 (success)
  */
-int register_uprobe(struct inode *inode, loff_t offset,
-				struct uprobe_consumer *consumer)
+int uprobe_register(struct inode *inode, loff_t offset, struct uprobe_consumer *consumer)
 {
 	struct uprobe *uprobe;
-	int ret = -EINVAL;
+	int ret;
 
 	if (!inode || !consumer || consumer->next)
-		return ret;
+		return -EINVAL;
 
 	if (offset > i_size_read(inode))
-		return ret;
+		return -EINVAL;
 
 	ret = 0;
 	mutex_lock(uprobes_hash(inode));
 	uprobe = alloc_uprobe(inode, offset);
-	if (uprobe && !add_consumer(uprobe, consumer)) {
-		ret = __register_uprobe(uprobe);
+
+	if (uprobe && !consumer_add(uprobe, consumer)) {
+		ret = __uprobe_register(uprobe);
 		if (ret) {
 			uprobe->consumers = NULL;
-			__unregister_uprobe(uprobe);
-		} else
+			__uprobe_unregister(uprobe);
+		} else {
 			uprobe->flags |= UPROBES_RUN_HANDLER;
+		}
 	}
 
 	mutex_unlock(uprobes_hash(inode));
@@ -823,15 +867,14 @@ int register_uprobe(struct inode *inode, loff_t offset,
 }
 
 /*
- * unregister_uprobe - unregister a already registered probe.
+ * uprobe_unregister - unregister a already registered probe.
  * @inode: the file in which the probe has to be removed.
  * @offset: offset from the start of the file.
  * @consumer: identify which probe if multiple probes are colocated.
  */
-void unregister_uprobe(struct inode *inode, loff_t offset,
-				struct uprobe_consumer *consumer)
+void uprobe_unregister(struct inode *inode, loff_t offset, struct uprobe_consumer *consumer)
 {
-	struct uprobe *uprobe = NULL;
+	struct uprobe *uprobe;
 
 	if (!inode || !consumer)
 		return;
@@ -841,15 +884,14 @@ void unregister_uprobe(struct inode *inode, loff_t offset,
 		return;
 
 	mutex_lock(uprobes_hash(inode));
-	if (!del_consumer(uprobe, consumer))
-		goto unreg_out;
 
-	if (!uprobe->consumers) {
-		__unregister_uprobe(uprobe);
-		uprobe->flags &= ~UPROBES_RUN_HANDLER;
+	if (consumer_del(uprobe, consumer)) {
+		if (!uprobe->consumers) {
+			__uprobe_unregister(uprobe);
+			uprobe->flags &= ~UPROBES_RUN_HANDLER;
+		}
 	}
 
-unreg_out:
 	mutex_unlock(uprobes_hash(inode));
 	if (uprobe)
 		put_uprobe(uprobe);
@@ -870,6 +912,7 @@ static struct rb_node *find_least_offset_node(struct inode *inode)
 	while (n) {
 		uprobe = rb_entry(n, struct uprobe, rb_node);
 		match = match_uprobe(&u, uprobe);
+
 		if (uprobe->inode == inode)
 			close_node = n;
 
@@ -881,6 +924,7 @@ static struct rb_node *find_least_offset_node(struct inode *inode)
 		else
 			n = n->rb_right;
 	}
+
 	return close_node;
 }
 
@@ -890,11 +934,13 @@ static struct rb_node *find_least_offset_node(struct inode *inode)
 static void build_probe_list(struct inode *inode, struct list_head *head)
 {
 	struct uprobe *uprobe;
-	struct rb_node *n;
 	unsigned long flags;
+	struct rb_node *n;
 
 	spin_lock_irqsave(&uprobes_treelock, flags);
+
 	n = find_least_offset_node(inode);
+
 	for (; n; n = rb_next(n)) {
 		uprobe = rb_entry(n, struct uprobe, rb_node);
 		if (uprobe->inode != inode)
@@ -903,6 +949,7 @@ static void build_probe_list(struct inode *inode, struct list_head *head)
 		list_add(&uprobe->pending_list, head);
 		atomic_inc(&uprobe->ref);
 	}
+
 	spin_unlock_irqrestore(&uprobes_treelock, flags);
 }
 
@@ -912,42 +959,44 @@ static void build_probe_list(struct inode *inode, struct list_head *head)
  *
  * Return -ve no if we fail to insert probes and we cannot
  * bail-out.
- * Return 0 otherwise. i.e :
+ * Return 0 otherwise. i.e:
+ *
  *	- successful insertion of probes
  *	- (or) no possible probes to be inserted.
  *	- (or) insertion of probes failed but we can bail-out.
  */
-int mmap_uprobe(struct vm_area_struct *vma)
+int uprobe_mmap(struct vm_area_struct *vma)
 {
 	struct list_head tmp_list;
 	struct uprobe *uprobe, *u;
 	struct inode *inode;
-	int ret = 0;
+	int ret;
 
 	if (!atomic_read(&uprobe_events) || !valid_vma(vma, true))
-		return ret;	/* Bail-out */
+		return 0;
 
 	inode = vma->vm_file->f_mapping->host;
 	if (!inode)
-		return ret;
+		return 0;
 
 	INIT_LIST_HEAD(&tmp_list);
 	mutex_lock(uprobes_mmap_hash(inode));
 	build_probe_list(inode, &tmp_list);
+
+	ret = 0;
+
 	list_for_each_entry_safe(uprobe, u, &tmp_list, pending_list) {
 		loff_t vaddr;
 
 		list_del(&uprobe->pending_list);
 		if (!ret) {
 			vaddr = vma_address(vma, uprobe->offset);
-			if (vaddr < vma->vm_start || vaddr >= vma->vm_end) {
-				put_uprobe(uprobe);
-				continue;
+			if (vaddr >= vma->vm_start && vaddr < vma->vm_end) {
+				ret = install_breakpoint(vma->vm_mm, uprobe, vma, vaddr);
+				/* Ignore double add: */
+				if (ret == -EEXIST)
+					ret = 0;
 			}
-			ret = install_breakpoint(vma->vm_mm, uprobe, vma,
-								vaddr);
-			if (ret == -EEXIST)
-				ret = 0;
 		}
 		put_uprobe(uprobe);
 	}
