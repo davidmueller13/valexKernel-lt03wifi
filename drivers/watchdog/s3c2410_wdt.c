@@ -213,6 +213,8 @@ static int s3c2410wdt_set_heartbeat(struct watchdog_device *wdd, unsigned timeou
 
 	wdd->timeout = timeout;
 
+	wdd->timeout = timeout;
+
 	return 0;
 }
 
