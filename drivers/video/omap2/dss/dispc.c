@@ -2572,7 +2572,7 @@ void dispc_dump_irqs(struct seq_file *s)
 }
 #endif
 
-void dispc_dump_regs(struct seq_file *s)
+static void dispc_dump_regs(struct seq_file *s)
 {
 	int i, j;
 	const char *mgr_names[] = {
@@ -3383,6 +3383,11 @@ static int omap_dispchw_probe(struct platform_device *pdev)
 
 	dispc_runtime_put();
 
+	dss_debugfs_create_file("dispc", dispc_dump_regs);
+
+#ifdef CONFIG_OMAP2_DSS_COLLECT_IRQ_STATS
+	dss_debugfs_create_file("dispc_irq", dispc_dump_irqs);
+#endif
 	return 0;
 
 err_runtime_get:
