@@ -46,8 +46,8 @@ static struct hw_pci netwinder_pci __initdata = {
 	.swizzle		= pci_std_swizzle,
 	.map_irq		= netwinder_map_irq,
 	.nr_controllers		= 1,
+	.ops			= &dc21285_ops,
 	.setup			= dc21285_setup,
-	.scan			= dc21285_scan_bus,
 	.preinit		= dc21285_preinit,
 	.postinit		= dc21285_postinit,
 };

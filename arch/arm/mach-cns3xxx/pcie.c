@@ -166,12 +166,6 @@ static struct pci_ops cns3xxx_pcie_ops = {
 	.write = cns3xxx_pci_write_config,
 };
 
-static struct pci_bus *cns3xxx_pci_scan_bus(int nr, struct pci_sys_data *sys)
-{
-	return pci_scan_root_bus(NULL, sys->busnr, &cns3xxx_pcie_ops, sys,
-				 &sys->resources);
-}
-
 static int cns3xxx_pcie_map_irq(const struct pci_dev *dev, u8 slot, u8 pin)
 {
 	struct cns3xxx_pcie *cnspci = pdev_to_cnspci(dev);
@@ -223,8 +217,8 @@ static struct cns3xxx_pcie cns3xxx_pcie[] = {
 			.domain = 0,
 			.swizzle = pci_std_swizzle,
 			.nr_controllers = 1,
+			.ops = &cns3xxx_pcie_ops,
 			.setup = cns3xxx_pci_setup,
-			.scan = cns3xxx_pci_scan_bus,
 			.map_irq = cns3xxx_pcie_map_irq,
 		},
 	},
@@ -266,8 +260,8 @@ static struct cns3xxx_pcie cns3xxx_pcie[] = {
 			.domain = 1,
 			.swizzle = pci_std_swizzle,
 			.nr_controllers = 1,
+			.ops = &cns3xxx_pcie_ops,
 			.setup = cns3xxx_pci_setup,
-			.scan = cns3xxx_pci_scan_bus,
 			.map_irq = cns3xxx_pcie_map_irq,
 		},
 	},

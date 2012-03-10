@@ -32,7 +32,7 @@ static struct hw_pci shark_pci __initdata = {
 	.swizzle	= pci_std_swizzle,
 	.map_irq	= shark_map_irq,
 	.nr_controllers = 1,
-	.scan		= via82c505_scan_bus,
+	.ops		= &via82c505_ops,
 	.preinit	= via82c505_preinit,
 };
 
