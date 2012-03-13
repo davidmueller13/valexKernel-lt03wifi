@@ -147,6 +147,10 @@ extern void cpuidle_pause_and_lock(void);
 extern void cpuidle_resume_and_unlock(void);
 extern int cpuidle_enable_device(struct cpuidle_device *dev);
 extern void cpuidle_disable_device(struct cpuidle_device *dev);
+extern int cpuidle_wrap_enter(struct cpuidle_device *dev,
+				struct cpuidle_driver *drv, int index,
+				int (*enter)(struct cpuidle_device *dev,
+					struct cpuidle_driver *drv, int index));
 extern int cpuidle_play_dead(void);
 
 #else
@@ -168,9 +172,18 @@ static inline void cpuidle_resume_and_unlock(void) { }
 static inline int cpuidle_enable_device(struct cpuidle_device *dev)
 {return -ENODEV; }
 static inline void cpuidle_disable_device(struct cpuidle_device *dev) { }
+<<<<<<< HEAD
 static inline int cpuidle_play_dead(void) {return -ENODEV; }
 
 #endif
+=======
+static inline int cpuidle_wrap_enter(struct cpuidle_device *dev,
+				struct cpuidle_driver *drv, int index,
+				int (*enter)(struct cpuidle_device *dev,
+					struct cpuidle_driver *drv, int index))
+{ return -ENODEV; }
+static inline int cpuidle_play_dead(void) {return -ENODEV; }
+>>>>>>> 1a022e3... idle, x86: Allow off-lined CPU to enter deeper C states
 
 #ifdef CONFIG_ARCH_NEEDS_CPU_IDLE_COUPLED
 void cpuidle_coupled_parallel_barrier(struct cpuidle_device *dev, atomic_t *a);
