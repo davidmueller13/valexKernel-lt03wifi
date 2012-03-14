@@ -213,7 +213,7 @@ static int netvsc_start_xmit(struct sk_buff *skb, struct net_device *net)
 		kfree(packet);
 	}
 
-	return ret ? NETDEV_TX_BUSY : NETDEV_TX_OK;
+	return NETDEV_TX_OK;
 }
 
 /*
