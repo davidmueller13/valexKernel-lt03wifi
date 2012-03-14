@@ -268,7 +268,7 @@ static void prepare_dma(struct s3c64xx_spi_dma_data *dma,
 	void __iomem *regs;
 	unsigned int mode_cfg;
 
-	if (dma->direction == DMA_DEV_TO_MEM) {
+	if (dma->direction == DMA_DEV_TO_MEM)
 		sdd = container_of((void *)dma,
 			struct s3c64xx_spi_driver_data, rx_dma);
 
