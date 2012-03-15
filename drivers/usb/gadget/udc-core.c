@@ -424,6 +424,8 @@ static ssize_t usb_udc_softconn_store(struct device *dev,
 			usb_gadget_udc_start(udc->gadget, udc->driver);
 		usb_gadget_connect(udc->gadget);
 	} else if (sysfs_streq(buf, "disconnect")) {
+		if (udc_is_newstyle(udc))
+			usb_gadget_udc_stop(udc->gadget, udc->driver);
 		usb_gadget_disconnect(udc->gadget);
 		if (udc_is_newstyle(udc))
 			usb_gadget_udc_stop(udc->gadget, udc->driver);
