@@ -33,6 +33,22 @@ static void seq_set_overflow(struct seq_file *m)
 	m->count = m->size;
 }
 
+
+/*
+ * seq_files have a buffer which can may overflow. When this happens a larger
+ * buffer is reallocated and all the data will be printed again.
+ * The overflow state is true when m->count == m->size.
+ */
+static bool seq_overflow(struct seq_file *m)
+{
+	return m->count == m->size;
+}
+
+static void seq_set_overflow(struct seq_file *m)
+{
+	m->count = m->size;
+}
+
 /**
  *	seq_open -	initialize sequential file
  *	@file: file we initialize
