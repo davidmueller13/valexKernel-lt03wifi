@@ -368,6 +368,8 @@ struct sta_info {
 	unsigned int lost_packets;
 	unsigned int beacon_loss_count;
 
+	bool supports_40mhz;
+
 	/* keep last! */
 	struct ieee80211_sta sta;
 };
