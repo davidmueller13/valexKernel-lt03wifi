@@ -150,6 +150,10 @@ int freeze_processes(void)
 	if (error)
 		return error;
 
+	error = usermodehelper_disable();
+	if (error)
+		return error;
+
 	if (!pm_freezing)
 		atomic_inc(&system_freezing_cnt);
 
