@@ -30,7 +30,6 @@
 #include <linux/debugfs.h>
 #include <linux/slab.h>
 #include <linux/export.h>
-#include <generated/utsrelease.h>
 #include "drmP.h"
 #include "drm.h"
 #include "intel_drv.h"
@@ -123,7 +122,7 @@ static const char *cache_level_str(int type)
 static void
 describe_obj(struct seq_file *m, struct drm_i915_gem_object *obj)
 {
-	seq_printf(m, "%pK: %s%s %8zdKiB %04x %04x %d %d%s%s%s",
+	seq_printf(m, "%p: %s%s %8zdKiB %04x %04x %d %d%s%s%s",
 		   &obj->base,
 		   get_pin_flag(obj),
 		   get_tiling_flag(obj),
@@ -341,7 +340,7 @@ static int i915_gem_pageflip_info(struct seq_file *m, void *data)
 			seq_printf(m, "No flip due on pipe %c (plane %c)\n",
 				   pipe, plane);
 		} else {
-			if (atomic_read(&work->pending) < INTEL_FLIP_COMPLETE) {
+			if (!work->pending) {
 				seq_printf(m, "Flip queued on pipe %c (plane %c)\n",
 					   pipe, plane);
 			} else {
@@ -352,7 +351,7 @@ static int i915_gem_pageflip_info(struct seq_file *m, void *data)
 				seq_printf(m, "Stall check enabled, ");
 			else
 				seq_printf(m, "Stall check waiting for page flip ioctl, ");
-			seq_printf(m, "%d prepares\n", atomic_read(&work->pending));
+			seq_printf(m, "%d prepares\n", work->pending);
 
 			if (work->old_fb_obj) {
 				struct drm_i915_gem_object *obj = work->old_fb_obj;
@@ -752,7 +751,6 @@ static int i915_error_state(struct seq_file *m, void *unused)
 
 	seq_printf(m, "Time: %ld s %ld us\n", error->time.tv_sec,
 		   error->time.tv_usec);
-	seq_printf(m, "Kernel: " UTS_RELEASE "\n");
 	seq_printf(m, "PCI ID: 0x%04x\n", dev->pci_device);
 	seq_printf(m, "EIR: 0x%08x\n", error->eir);
 	seq_printf(m, "PGTBL_ER: 0x%08x\n", error->pgtbl_er);
@@ -1227,9 +1225,6 @@ static int i915_emon_status(struct seq_file *m, void *unused)
 	unsigned long temp, chipset, gfx;
 	int ret;
 
-	if (!IS_GEN5(dev))
-		return -ENODEV;
-
 	ret = mutex_lock_interruptible(&dev->struct_mutex);
 	if (ret)
 		return ret;
@@ -1508,6 +1503,61 @@ static int i915_ppgtt_info(struct seq_file *m, void *data)
 	return 0;
 }
 
+static int i915_dpio_info(struct seq_file *m, void *data)
+{
+	struct drm_info_node *node = (struct drm_info_node *) m->private;
+	struct drm_device *dev = node->minor->dev;
+	struct drm_i915_private *dev_priv = dev->dev_private;
+	int ret;
+
+
+	if (!IS_VALLEYVIEW(dev)) {
+		seq_printf(m, "unsupported\n");
+		return 0;
+	}
+
+	ret = mutex_lock_interruptible(&dev->mode_config.mutex);
+	if (ret)
+		return ret;
+
+	seq_printf(m, "DPIO_CTL: 0x%08x\n", I915_READ(DPIO_CTL));
+
+	seq_printf(m, "DPIO_DIV_A: 0x%08x\n",
+		   intel_dpio_read(dev_priv, _DPIO_DIV_A));
+	seq_printf(m, "DPIO_DIV_B: 0x%08x\n",
+		   intel_dpio_read(dev_priv, _DPIO_DIV_B));
+
+	seq_printf(m, "DPIO_REFSFR_A: 0x%08x\n",
+		   intel_dpio_read(dev_priv, _DPIO_REFSFR_A));
+	seq_printf(m, "DPIO_REFSFR_B: 0x%08x\n",
+		   intel_dpio_read(dev_priv, _DPIO_REFSFR_B));
+
+	seq_printf(m, "DPIO_CORE_CLK_A: 0x%08x\n",
+		   intel_dpio_read(dev_priv, _DPIO_CORE_CLK_A));
+	seq_printf(m, "DPIO_CORE_CLK_B: 0x%08x\n",
+		   intel_dpio_read(dev_priv, _DPIO_CORE_CLK_B));
+
+	seq_printf(m, "DPIO_LFP_COEFF_A: 0x%08x\n",
+		   intel_dpio_read(dev_priv, _DPIO_LFP_COEFF_A));
+	seq_printf(m, "DPIO_LFP_COEFF_B: 0x%08x\n",
+		   intel_dpio_read(dev_priv, _DPIO_LFP_COEFF_B));
+
+	seq_printf(m, "DPIO_FASTCLK_DISABLE: 0x%08x\n",
+		   intel_dpio_read(dev_priv, DPIO_FASTCLK_DISABLE));
+
+	mutex_unlock(&dev->mode_config.mutex);
+
+	return 0;
+}
+
+static int
+i915_debugfs_common_open(struct inode *inode,
+			 struct file *filp)
+{
+	filp->private_data = inode->i_private;
+	return 0;
+}
+
 static ssize_t
 i915_wedged_read(struct file *filp,
 		 char __user *ubuf,
@@ -1558,7 +1608,7 @@ i915_wedged_write(struct file *filp,
 
 static const struct file_operations i915_wedged_fops = {
 	.owner = THIS_MODULE,
-	.open = simple_open,
+	.open = i915_debugfs_common_open,
 	.read = i915_wedged_read,
 	.write = i915_wedged_write,
 	.llseek = default_llseek,
@@ -1620,7 +1670,7 @@ i915_max_freq_write(struct file *filp,
 
 static const struct file_operations i915_max_freq_fops = {
 	.owner = THIS_MODULE,
-	.open = simple_open,
+	.open = i915_debugfs_common_open,
 	.read = i915_max_freq_read,
 	.write = i915_max_freq_write,
 	.llseek = default_llseek,
@@ -1691,7 +1741,7 @@ i915_cache_sharing_write(struct file *filp,
 
 static const struct file_operations i915_cache_sharing_fops = {
 	.owner = THIS_MODULE,
-	.open = simple_open,
+	.open = i915_debugfs_common_open,
 	.read = i915_cache_sharing_read,
 	.write = i915_cache_sharing_write,
 	.llseek = default_llseek,
@@ -1842,6 +1892,7 @@ static struct drm_info_list i915_debugfs_list[] = {
 	{"i915_gen6_forcewake_count", i915_gen6_forcewake_count_info, 0},
 	{"i915_swizzle_info", i915_swizzle_info, 0},
 	{"i915_ppgtt_info", i915_ppgtt_info, 0},
+	{"i915_dpio", i915_dpio_info, 0},
 };
 #define I915_DEBUGFS_ENTRIES ARRAY_SIZE(i915_debugfs_list)
 
