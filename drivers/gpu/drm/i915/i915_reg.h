@@ -650,6 +650,9 @@
 #define   ECO_GATING_CX_ONLY	(1<<3)
 #define   ECO_FLIP_DONE		(1<<0)
 
+#define CACHE_MODE_1		0x7004 /* IVB+ */
+#define   PIXEL_SUBSPAN_COLLECT_OPT_DISABLE (1<<6)
+
 /* GEN6 interrupt control */
 #define GEN6_RENDER_HWSTAM	0x2098
 #define GEN6_RENDER_IMR		0x20a8
