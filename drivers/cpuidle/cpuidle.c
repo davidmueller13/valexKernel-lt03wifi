@@ -59,6 +59,9 @@ int cpuidle_play_dead(void)
 	if (!drv)
 		return -ENODEV;
 
+	if (!drv)
+		return -ENODEV;
+
 	/* Find lowest-power state that supports long-term idle */
 	for (i = CPUIDLE_DRIVER_STATE_START; i < drv->state_count; i++) {
 		struct cpuidle_state *s = &drv->states[i];
