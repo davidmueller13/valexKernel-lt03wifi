@@ -58,6 +58,12 @@ static void __init ek_init_early(void)
 {
 	/* Initialize processor: 18.432 MHz crystal */
 	at91_initialize(18432000);
+
+	/* Setup the LEDs */
+	at91_init_leds(AT91_PIN_PA13, AT91_PIN_PA14);
+
+	/* DBGU on ttyS0. (Rx & Tx only) */
+	at91_register_uart(0, 0, 0);
 }
 
 /*
@@ -76,6 +82,8 @@ static struct resource dm9000_resource[] = {
 		.flags	= IORESOURCE_MEM
 	},
 	[2] = {
+		.start	= AT91_PIN_PC11,
+		.end	= AT91_PIN_PC11,
 		.flags	= IORESOURCE_IRQ
 			| IORESOURCE_IRQ_LOWEDGE | IORESOURCE_IRQ_HIGHEDGE,
 	}
@@ -119,8 +127,6 @@ static struct sam9_smc_config __initdata dm9000_smc_config = {
 
 static void __init ek_add_device_dm9000(void)
 {
-	struct resource *r = &dm9000_resource[2];
-
 	/* Configure chip-select 2 (DM9000) */
 	sam9_smc_configure(0, 2, &dm9000_smc_config);
 
@@ -130,7 +136,6 @@ static void __init ek_add_device_dm9000(void)
 	/* Configure Interrupt pin as input, no pull-up */
 	at91_set_gpio_input(AT91_PIN_PC11, 0);
 
-	r->start = r->end = gpio_to_irq(AT91_PIN_PC11);
 	platform_device_register(&dm9000_device);
 }
 #else
@@ -568,12 +573,7 @@ static struct gpio_led ek_leds[] = {
 
 static void __init ek_board_init(void)
 {
-	/* Setup the LEDs */
-	at91_init_leds(AT91_PIN_PA13, AT91_PIN_PA14);
-
 	/* Serial */
-	/* DBGU on ttyS0. (Rx & Tx only) */
-	at91_register_uart(0, 0, 0);
 	at91_add_device_serial();
 	/* USB Host */
 	at91_add_device_usbh(&ek_usbh_data);
