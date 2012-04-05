@@ -54,6 +54,7 @@ EXPORT_SYMBOL_GPL(snd_soc_debugfs_root);
 #endif
 
 static DEFINE_MUTEX(client_mutex);
+static LIST_HEAD(card_list);
 static LIST_HEAD(dai_list);
 static LIST_HEAD(platform_list);
 static LIST_HEAD(codec_list);
@@ -572,16 +573,19 @@ int snd_soc_suspend(struct device *dev)
 	}
 
 	for (i = 0; i < card->num_rtd; i++) {
+		struct snd_soc_dai *codec_dai = card->rtd[i].codec_dai;
 
 		if (card->rtd[i].dai_link->ignore_suspend)
 			continue;
 
 		snd_soc_dapm_stream_event(&card->rtd[i],
 					  SNDRV_PCM_STREAM_PLAYBACK,
+					  codec_dai,
 					  SND_SOC_DAPM_STREAM_SUSPEND);
 
 		snd_soc_dapm_stream_event(&card->rtd[i],
 					  SNDRV_PCM_STREAM_CAPTURE,
+					  codec_dai,
 					  SND_SOC_DAPM_STREAM_SUSPEND);
 	}
 
@@ -685,16 +689,17 @@ static void soc_resume_deferred(struct work_struct *work)
 	}
 
 	for (i = 0; i < card->num_rtd; i++) {
+		struct snd_soc_dai *codec_dai = card->rtd[i].codec_dai;
 
 		if (card->rtd[i].dai_link->ignore_suspend)
 			continue;
 
 		snd_soc_dapm_stream_event(&card->rtd[i],
-					  SNDRV_PCM_STREAM_PLAYBACK,
+					  SNDRV_PCM_STREAM_PLAYBACK, codec_dai,
 					  SND_SOC_DAPM_STREAM_RESUME);
 
 		snd_soc_dapm_stream_event(&card->rtd[i],
-					  SNDRV_PCM_STREAM_CAPTURE,
+					  SNDRV_PCM_STREAM_CAPTURE, codec_dai,
 					  SND_SOC_DAPM_STREAM_RESUME);
 	}
 
@@ -784,9 +789,15 @@ static int soc_bind_dai_link(struct snd_soc_card *card, int num)
 	struct snd_soc_dai *codec_dai, *cpu_dai;
 	const char *platform_name;
 
+	if (rtd->complete)
+		return 1;
 	dev_dbg(card->dev, "binding %s at idx %d\n", dai_link->name, num);
 
-	/* Find CPU DAI from registered DAIs*/
+	/* do we already have the CPU DAI for this link ? */
+	if (rtd->cpu_dai) {
+		goto find_codec;
+	}
+	/* no, then find CPU DAI from registered DAIs*/
 	list_for_each_entry(cpu_dai, &dai_list, list) {
 		if (dai_link->cpu_dai_of_node) {
 			if (cpu_dai->dev->of_node != dai_link->cpu_dai_of_node)
@@ -797,15 +808,18 @@ static int soc_bind_dai_link(struct snd_soc_card *card, int num)
 		}
 
 		rtd->cpu_dai = cpu_dai;
+		goto find_codec;
 	}
-
-	if (!rtd->cpu_dai) {
-		dev_dbg(card->dev, "CPU DAI %s not registered\n",
+	dev_dbg(card->dev, "CPU DAI %s not registered\n",
 			dai_link->cpu_dai_name);
-		return -EPROBE_DEFER;
+
+find_codec:
+	/* do we already have the CODEC for this link ? */
+	if (rtd->codec) {
+		goto find_platform;
 	}
 
-	/* Find CODEC from registered CODECs */
+	/* no, then find CODEC from registered CODECs*/
 	list_for_each_entry(codec, &codec_list, list) {
 		if (dai_link->codec_of_node) {
 			if (codec->dev->of_node != dai_link->codec_of_node)
@@ -827,28 +841,28 @@ static int soc_bind_dai_link(struct snd_soc_card *card, int num)
 					dai_link->codec_dai_name)) {
 
 				rtd->codec_dai = codec_dai;
+				goto find_platform;
 			}
 		}
-
-		if (!rtd->codec_dai) {
-			dev_dbg(card->dev, "CODEC DAI %s not registered\n",
+		dev_dbg(card->dev, "CODEC DAI %s not registered\n",
 				dai_link->codec_dai_name);
-			return -EPROBE_DEFER;
-		}
-	}
 
-	if (!rtd->codec) {
-		dev_dbg(card->dev, "CODEC %s not registered\n",
-			dai_link->codec_name);
-		return -EPROBE_DEFER;
+		goto find_platform;
 	}
+	dev_dbg(card->dev, "CODEC %s not registered\n",
+			dai_link->codec_name);
+
+find_platform:
+	/* do we need a platform? */
+	if (rtd->platform)
+		goto out;
 
 	/* if there's no platform we match on the empty platform */
 	platform_name = dai_link->platform_name;
 	if (!platform_name && !dai_link->platform_of_node)
 		platform_name = "snd-soc-dummy";
 
-	/* find one from the set of registered platforms */
+	/* no, then find one from the set of registered platforms */
 	list_for_each_entry(platform, &platform_list, list) {
 		if (dai_link->platform_of_node) {
 			if (platform->dev->of_node !=
@@ -860,16 +874,20 @@ static int soc_bind_dai_link(struct snd_soc_card *card, int num)
 		}
 
 		rtd->platform = platform;
+		goto out;
 	}
-	if (!rtd->platform) {
-		dev_dbg(card->dev, "platform %s not registered\n",
+
+	dev_dbg(card->dev, "platform %s not registered\n",
 			dai_link->platform_name);
-		return -EPROBE_DEFER;
-	}
-
-	card->num_rtd++;
-
 	return 0;
+
+out:
+	/* mark rtd as complete if we found all 4 of our client devices */
+	if (rtd->codec && rtd->codec_dai && rtd->platform && rtd->cpu_dai) {
+		rtd->complete = 1;
+		card->num_rtd++;
+	}
+	return 1;
 }
 
 static void soc_remove_codec(struct snd_soc_codec *codec)
@@ -1056,7 +1074,6 @@ static int soc_probe_platform(struct snd_soc_card *card,
 {
 	int ret = 0;
 	const struct snd_soc_platform_driver *driver = platform->driver;
-	struct snd_soc_dai *dai;
 
 	platform->card = card;
 	platform->dapm.card = card;
@@ -1070,13 +1087,7 @@ static int soc_probe_platform(struct snd_soc_card *card,
 		snd_soc_dapm_new_controls(&platform->dapm,
 			driver->dapm_widgets, driver->num_dapm_widgets);
 
-	/* Create DAPM widgets for each DAI stream */
-	list_for_each_entry(dai, &dai_list, list) {
-		if (dai->dev != platform->dev)
-			continue;
-
-		snd_soc_dapm_new_dai_widgets(&platform->dapm, dai);
-	}
+	platform->dapm.idle_bias_off = 1;
 
 	if (driver->probe) {
 		ret = driver->probe(platform);
@@ -1213,11 +1224,8 @@ static int soc_probe_dai_link(struct snd_soc_card *card, int num, int order)
 	/* probe the cpu_dai */
 	if (!cpu_dai->probed &&
 			cpu_dai->driver->probe_order == order) {
-		cpu_dai->dapm.card = card;
 		if (!try_module_get(cpu_dai->dev->driver->owner))
 			return -ENODEV;
-
-		snd_soc_dapm_new_dai_widgets(&cpu_dai->dapm, cpu_dai);
 
 		if (cpu_dai->driver->probe) {
 			ret = cpu_dai->driver->probe(cpu_dai);
@@ -1332,20 +1340,6 @@ static void soc_unregister_ac97_dai_link(struct snd_soc_codec *codec)
 }
 #endif
 
-static int soc_check_aux_dev(struct snd_soc_card *card, int num)
-{
-	struct snd_soc_aux_dev *aux_dev = &card->aux_dev[num];
-	struct snd_soc_codec *codec;
-
-	/* find CODEC from registered CODECs*/
-	list_for_each_entry(codec, &codec_list, list) {
-		if (!strcmp(codec->name, aux_dev->codec_name))
-			return 0;
-	}
-
-	return -EPROBE_DEFER;
-}
-
 static int soc_probe_aux_dev(struct snd_soc_card *card, int num)
 {
 	struct snd_soc_aux_dev *aux_dev = &card->aux_dev[num];
@@ -1366,7 +1360,7 @@ static int soc_probe_aux_dev(struct snd_soc_card *card, int num)
 	}
 	/* codec not found */
 	dev_err(card->dev, "asoc: codec %s not found", aux_dev->codec_name);
-	return -EPROBE_DEFER;
+	goto out;
 
 found:
 	ret = soc_probe_codec(card, codec);
@@ -1416,7 +1410,7 @@ static int snd_soc_init_codec_cache(struct snd_soc_codec *codec,
 	return 0;
 }
 
-static int snd_soc_instantiate_card(struct snd_soc_card *card)
+static void snd_soc_instantiate_card(struct snd_soc_card *card)
 {
 	struct snd_soc_codec *codec;
 	struct snd_soc_codec_conf *codec_conf;
@@ -1424,20 +1418,21 @@ static int snd_soc_instantiate_card(struct snd_soc_card *card)
 	struct snd_soc_dai_link *dai_link;
 	int ret, i, order;
 
-	mutex_lock_nested(&card->mutex, SND_SOC_CARD_CLASS_INIT);
+	mutex_lock(&card->mutex);
 
-	/* bind DAIs */
-	for (i = 0; i < card->num_links; i++) {
-		ret = soc_bind_dai_link(card, i);
-		if (ret != 0)
-			goto base_error;
+	if (card->instantiated) {
+		mutex_unlock(&card->mutex);
+		return;
 	}
 
-	/* check aux_devs too */
-	for (i = 0; i < card->num_aux_devs; i++) {
-		ret = soc_check_aux_dev(card, i);
-		if (ret != 0)
-			goto base_error;
+	/* bind DAIs */
+	for (i = 0; i < card->num_links; i++)
+		soc_bind_dai_link(card, i);
+
+	/* bind completed ? */
+	if (card->num_rtd != card->num_links) {
+		mutex_unlock(&card->mutex);
+		return;
 	}
 
 	/* initialize the register cache for each available codec */
@@ -1457,8 +1452,10 @@ static int snd_soc_instantiate_card(struct snd_soc_card *card)
 			}
 		}
 		ret = snd_soc_init_codec_cache(codec, compress_type);
-		if (ret < 0)
-			goto base_error;
+		if (ret < 0) {
+			mutex_unlock(&card->mutex);
+			return;
+		}
 	}
 
 	/* card bind complete so register a sound card */
@@ -1467,7 +1464,8 @@ static int snd_soc_instantiate_card(struct snd_soc_card *card)
 	if (ret < 0) {
 		pr_err("asoc: can't create sound card for card %s: %d\n",
 			card->name, ret);
-		goto base_error;
+		mutex_unlock(&card->mutex);
+		return;
 	}
 	card->snd_card->dev = card->dev;
 
@@ -1607,8 +1605,7 @@ static int snd_soc_instantiate_card(struct snd_soc_card *card)
 	card->instantiated = 1;
 	snd_soc_dapm_sync(&card->dapm);
 	mutex_unlock(&card->mutex);
-
-	return 0;
+	return;
 
 probe_aux_dev_err:
 	for (i = 0; i < card->num_aux_devs; i++)
@@ -1623,10 +1620,18 @@ card_probe_error:
 
 	snd_card_free(card->snd_card);
 
-base_error:
 	mutex_unlock(&card->mutex);
+}
 
-	return ret;
+/*
+ * Attempt to initialise any uninitialised cards.  Must be called with
+ * client_mutex.
+ */
+static void snd_soc_instantiate_cards(void)
+{
+	struct snd_soc_card *card;
+	list_for_each_entry(card, &card_list, list)
+		snd_soc_instantiate_card(card);
 }
 
 /* probes a new socdev */
@@ -2528,87 +2533,6 @@ int snd_soc_put_volsw(struct snd_kcontrol *kcontrol,
 EXPORT_SYMBOL_GPL(snd_soc_put_volsw);
 
 /**
- * snd_soc_get_volsw_sx - single mixer get callback
- * @kcontrol: mixer control
- * @ucontrol: control element information
- *
- * Callback to get the value of a single mixer control, or a double mixer
- * control that spans 2 registers.
- *
- * Returns 0 for success.
- */
-int snd_soc_get_volsw_sx(struct snd_kcontrol *kcontrol,
-		      struct snd_ctl_elem_value *ucontrol)
-{
-	struct snd_soc_codec *codec = snd_kcontrol_chip(kcontrol);
-	struct soc_mixer_control *mc =
-	    (struct soc_mixer_control *)kcontrol->private_value;
-
-	unsigned int reg = mc->reg;
-	unsigned int reg2 = mc->rreg;
-	unsigned int shift = mc->shift;
-	unsigned int rshift = mc->rshift;
-	int max = mc->max;
-	int min = mc->min;
-	int mask = (1 << (fls(min + max) - 1)) - 1;
-
-	ucontrol->value.integer.value[0] =
-	    ((snd_soc_read(codec, reg) >> shift) - min) & mask;
-
-	if (snd_soc_volsw_is_stereo(mc))
-		ucontrol->value.integer.value[1] =
-			((snd_soc_read(codec, reg2) >> rshift) - min) & mask;
-
-	return 0;
-}
-EXPORT_SYMBOL_GPL(snd_soc_get_volsw_sx);
-
-/**
- * snd_soc_put_volsw_sx - double mixer set callback
- * @kcontrol: mixer control
- * @uinfo: control element information
- *
- * Callback to set the value of a double mixer control that spans 2 registers.
- *
- * Returns 0 for success.
- */
-int snd_soc_put_volsw_sx(struct snd_kcontrol *kcontrol,
-			 struct snd_ctl_elem_value *ucontrol)
-{
-	struct snd_soc_codec *codec = snd_kcontrol_chip(kcontrol);
-	struct soc_mixer_control *mc =
-	    (struct soc_mixer_control *)kcontrol->private_value;
-
-	unsigned int reg = mc->reg;
-	unsigned int reg2 = mc->rreg;
-	unsigned int shift = mc->shift;
-	unsigned int rshift = mc->rshift;
-	int max = mc->max;
-	int min = mc->min;
-	int mask = (1 << (fls(min + max) - 1)) - 1;
-	int err = 0;
-	unsigned short val, val_mask, val2 = 0;
-
-	val_mask = mask << shift;
-	val = (ucontrol->value.integer.value[0] + min) & mask;
-	val = val << shift;
-
-	if (snd_soc_update_bits_locked(codec, reg, val_mask, val))
-			return err;
-
-	if (snd_soc_volsw_is_stereo(mc)) {
-		val_mask = mask << rshift;
-		val2 = (ucontrol->value.integer.value[1] + min) & mask;
-		val2 = val2 << rshift;
-
-		if (snd_soc_update_bits_locked(codec, reg2, val_mask, val2))
-			return err;
-	}
-	return 0;
-}
-EXPORT_SYMBOL_GPL(snd_soc_put_volsw_sx);
-
-/**
  * snd_soc_info_volsw_s8 - signed mixer info callback
  * @kcontrol: mixer control
  * @uinfo: control element information
@@ -2728,6 +2652,99 @@ int snd_soc_limit_volume(struct snd_soc_codec *codec,
 	return ret;
 }
 EXPORT_SYMBOL_GPL(snd_soc_limit_volume);
+
+/**
+ * snd_soc_info_volsw_2r_sx - double with tlv and variable data size
+ *  mixer info callback
+ * @kcontrol: mixer control
+ * @uinfo: control element information
+ *
+ * Returns 0 for success.
+ */
+int snd_soc_info_volsw_2r_sx(struct snd_kcontrol *kcontrol,
+			struct snd_ctl_elem_info *uinfo)
+{
+	struct soc_mixer_control *mc =
+		(struct soc_mixer_control *)kcontrol->private_value;
+	int max = mc->max;
+	int min = mc->min;
+
+	uinfo->type = SNDRV_CTL_ELEM_TYPE_INTEGER;
+	uinfo->count = 2;
+	uinfo->value.integer.min = 0;
+	uinfo->value.integer.max = max-min;
+
+	return 0;
+}
+EXPORT_SYMBOL_GPL(snd_soc_info_volsw_2r_sx);
+
+/**
+ * snd_soc_get_volsw_2r_sx - double with tlv and variable data size
+ *  mixer get callback
+ * @kcontrol: mixer control
+ * @uinfo: control element information
+ *
+ * Returns 0 for success.
+ */
+int snd_soc_get_volsw_2r_sx(struct snd_kcontrol *kcontrol,
+			struct snd_ctl_elem_value *ucontrol)
+{
+	struct soc_mixer_control *mc =
+		(struct soc_mixer_control *)kcontrol->private_value;
+	struct snd_soc_codec *codec = snd_kcontrol_chip(kcontrol);
+	unsigned int mask = (1<<mc->shift)-1;
+	int min = mc->min;
+	int val = snd_soc_read(codec, mc->reg) & mask;
+	int valr = snd_soc_read(codec, mc->rreg) & mask;
+
+	ucontrol->value.integer.value[0] = ((val & 0xff)-min) & mask;
+	ucontrol->value.integer.value[1] = ((valr & 0xff)-min) & mask;
+	return 0;
+}
+EXPORT_SYMBOL_GPL(snd_soc_get_volsw_2r_sx);
+
+/**
+ * snd_soc_put_volsw_2r_sx - double with tlv and variable data size
+ *  mixer put callback
+ * @kcontrol: mixer control
+ * @uinfo: control element information
+ *
+ * Returns 0 for success.
+ */
+int snd_soc_put_volsw_2r_sx(struct snd_kcontrol *kcontrol,
+			struct snd_ctl_elem_value *ucontrol)
+{
+	struct soc_mixer_control *mc =
+		(struct soc_mixer_control *)kcontrol->private_value;
+	struct snd_soc_codec *codec = snd_kcontrol_chip(kcontrol);
+	unsigned int mask = (1<<mc->shift)-1;
+	int min = mc->min;
+	int ret;
+	unsigned int val, valr, oval, ovalr;
+
+	val = ((ucontrol->value.integer.value[0]+min) & 0xff);
+	val &= mask;
+	valr = ((ucontrol->value.integer.value[1]+min) & 0xff);
+	valr &= mask;
+
+	oval = snd_soc_read(codec, mc->reg) & mask;
+	ovalr = snd_soc_read(codec, mc->rreg) & mask;
+
+	ret = 0;
+	if (oval != val) {
+		ret = snd_soc_write(codec, mc->reg, val);
+		if (ret < 0)
+			return ret;
+	}
+	if (ovalr != valr) {
+		ret = snd_soc_write(codec, mc->rreg, valr);
+		if (ret < 0)
+			return ret;
+	}
+
+	return 0;
+}
+EXPORT_SYMBOL_GPL(snd_soc_put_volsw_2r_sx);
 
 int snd_soc_bytes_info(struct snd_kcontrol *kcontrol,
 		       struct snd_ctl_elem_info *uinfo)
@@ -3049,7 +3066,7 @@ EXPORT_SYMBOL_GPL(snd_soc_dai_digital_mute);
  */
 int snd_soc_register_card(struct snd_soc_card *card)
 {
-	int i, ret;
+	int i;
 
 	if (!card->name || !card->dev)
 		return -EINVAL;
@@ -3111,13 +3128,15 @@ int snd_soc_register_card(struct snd_soc_card *card)
 	INIT_LIST_HEAD(&card->dapm_dirty);
 	card->instantiated = 0;
 	mutex_init(&card->mutex);
-	mutex_init(&card->dapm_mutex);
 
-	ret = snd_soc_instantiate_card(card);
-	if (ret != 0)
-		soc_cleanup_card_debugfs(card);
+	mutex_lock(&client_mutex);
+	list_add(&card->list, &card_list);
+	snd_soc_instantiate_cards();
+	mutex_unlock(&client_mutex);
 
-	return ret;
+	dev_dbg(card->dev, "Registered card '%s'\n", card->name);
+
+	return 0;
 }
 EXPORT_SYMBOL_GPL(snd_soc_register_card);
 
@@ -3131,6 +3150,9 @@ int snd_soc_unregister_card(struct snd_soc_card *card)
 {
 	if (card->instantiated)
 		soc_cleanup_card_resources(card);
+	mutex_lock(&client_mutex);
+	list_del(&card->list);
+	mutex_unlock(&client_mutex);
 	dev_dbg(card->dev, "Unregistered card '%s'\n", card->name);
 
 	return 0;
@@ -3221,12 +3243,12 @@ int snd_soc_register_dai(struct device *dev,
 
 	dai->dev = dev;
 	dai->driver = dai_drv;
-	dai->dapm.dev = dev;
 	if (!dai->driver->ops)
 		dai->driver->ops = &null_dai_ops;
 
 	mutex_lock(&client_mutex);
 	list_add(&dai->list, &dai_list);
+	snd_soc_instantiate_cards();
 	mutex_unlock(&client_mutex);
 
 	pr_debug("Registered DAI '%s'\n", dai->name);
@@ -3297,7 +3319,6 @@ int snd_soc_register_dais(struct device *dev,
 			dai->id = dai->driver->id;
 		else
 			dai->id = i;
-		dai->dapm.dev = dev;
 		if (!dai->driver->ops)
 			dai->driver->ops = &null_dai_ops;
 
@@ -3308,6 +3329,9 @@ int snd_soc_register_dais(struct device *dev,
 		pr_debug("Registered DAI '%s'\n", dai->name);
 	}
 
+	mutex_lock(&client_mutex);
+	snd_soc_instantiate_cards();
+	mutex_unlock(&client_mutex);
 	return 0;
 
 err:
@@ -3365,6 +3389,7 @@ int snd_soc_register_platform(struct device *dev,
 
 	mutex_lock(&client_mutex);
 	list_add(&platform->list, &platform_list);
+	snd_soc_instantiate_cards();
 	mutex_unlock(&client_mutex);
 
 	pr_debug("Registered platform '%s'\n", platform->name);
@@ -3523,6 +3548,7 @@ int snd_soc_register_codec(struct device *dev,
 
 	mutex_lock(&client_mutex);
 	list_add(&codec->list, &codec_list);
+	snd_soc_instantiate_cards();
 	mutex_unlock(&client_mutex);
 
 	pr_debug("Registered codec '%s'\n", codec->name);
