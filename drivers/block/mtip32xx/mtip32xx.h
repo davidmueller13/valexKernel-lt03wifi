@@ -156,6 +156,19 @@ __packed struct smart_attr{
 #define MTIP_DD_FLAG_CLEANUP_BIT		3
 #define MTIP_DD_FLAG_INIT_DONE_BIT		4
 
+#define MTIP_DD_FLAG_WRITE_PROTECT_BIT		5
+#define MTIP_DD_FLAG_OVER_TEMP_BIT		6
+#define MTIP_DD_FLAG_REBUILD_FAILED_BIT		7
+
+__packed struct smart_attr{
+	u8 attr_id;
+	u16 flags;
+	u8 cur;
+	u8 worst;
+	u32 data;
+	u8 res[3];
+};
+
 /* Register Frame Information Structure (FIS), host to device. */
 struct host_to_dev_fis {
 	/*
