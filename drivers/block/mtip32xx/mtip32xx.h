@@ -150,6 +150,12 @@ __packed struct smart_attr{
 	u8 res[3];
 };
 
+/* below are bit numbers in 'dd_flag' defined in driver_data */
+#define MTIP_DD_FLAG_REMOVE_PENDING_BIT		1
+#define MTIP_DD_FLAG_RESUME_BIT			2
+#define MTIP_DD_FLAG_CLEANUP_BIT		3
+#define MTIP_DD_FLAG_INIT_DONE_BIT		4
+
 /* Register Frame Information Structure (FIS), host to device. */
 struct host_to_dev_fis {
 	/*
