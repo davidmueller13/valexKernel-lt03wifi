@@ -48,7 +48,7 @@ bool regmap_readable(struct regmap *map, unsigned int reg)
 
 bool regmap_volatile(struct regmap *map, unsigned int reg)
 {
-	if (!map->format.format_write && !regmap_readable(map, reg))
+	if (!regmap_readable(map, reg))
 		return false;
 
 	if (map->volatile_reg)
@@ -69,7 +69,7 @@ bool regmap_precious(struct regmap *map, unsigned int reg)
 }
 
 static bool regmap_volatile_range(struct regmap *map, unsigned int reg,
-	size_t num)
+	unsigned int num)
 {
 	unsigned int i;
 
@@ -243,6 +243,10 @@ struct regmap *regmap_init(struct device *dev,
 	map->format.val_bytes = DIV_ROUND_UP(config->val_bits, 8);
 	map->format.buf_size += map->format.pad_bytes;
 	map->reg_shift = config->pad_bits % 8;
+	if (config->reg_stride)
+		map->reg_stride = config->reg_stride;
+	else
+		map->reg_stride = 1;
 	map->dev = dev;
 	map->bus = bus;
 	map->bus_context = bus_context;
@@ -469,7 +473,8 @@ static int _regmap_raw_write(struct regmap *map, unsigned int reg,
 	/* Check for unwritable registers before we start */
 	if (map->writeable_reg)
 		for (i = 0; i < val_len / map->format.val_bytes; i++)
-			if (!map->writeable_reg(map->dev, reg + i))
+			if (!map->writeable_reg(map->dev,
+						reg + (i * map->reg_stride)))
 				return -EINVAL;
 
 	if (!map->cache_bypass && map->format.parse_val) {
@@ -478,7 +483,8 @@ static int _regmap_raw_write(struct regmap *map, unsigned int reg,
 		for (i = 0; i < val_len / val_bytes; i++) {
 			memcpy(map->work_buf, val + (i * val_bytes), val_bytes);
 			ival = map->format.parse_val(map->work_buf);
-			ret = regcache_write(map, reg + i, ival);
+			ret = regcache_write(map, reg + (i * map->reg_stride),
+					     ival);
 			if (ret) {
 				dev_err(map->dev,
 				   "Error in caching of register: %u ret: %d\n",
@@ -590,6 +596,9 @@ int regmap_write(struct regmap *map, unsigned int reg, unsigned int val)
 {
 	int ret;
 
+	if (reg % map->reg_stride)
+		return -EINVAL;
+
 	map->lock(map);
 
 	ret = _regmap_write(map, reg, val);
@@ -622,6 +631,8 @@ int regmap_raw_write(struct regmap *map, unsigned int reg,
 	int ret;
 
 	if (val_len % map->format.val_bytes)
+		return -EINVAL;
+	if (reg % map->reg_stride)
 		return -EINVAL;
 
 	map->lock(map);
@@ -657,6 +668,8 @@ int regmap_bulk_write(struct regmap *map, unsigned int reg, const void *val,
 
 	if (!map->format.parse_val)
 		return -EINVAL;
+	if (reg % map->reg_stride)
+		return -EINVAL;
 
 	map->lock(map);
 
@@ -664,11 +677,6 @@ int regmap_bulk_write(struct regmap *map, unsigned int reg, const void *val,
 	if (val_bytes == 1) {
 		wval = (void *)val;
 	} else {
-		if (!val_count) {
-			ret = -EINVAL;
-			goto out;
-		}
-
 		wval = kmemdup(val, val_count * val_bytes, GFP_KERNEL);
 		if (!wval) {
 			ret = -ENOMEM;
@@ -688,93 +696,6 @@ out:
 	return ret;
 }
 EXPORT_SYMBOL_GPL(regmap_bulk_write);
-
-static int _regmap_multi_reg_write(struct regmap *map,
-				   const struct reg_default *regs,
-				   int num_regs)
-{
-	int i, ret;
-
-	for (i = 0; i < num_regs; i++) {
-		ret = _regmap_write(map, regs[i].reg, regs[i].def);
-		if (ret != 0) {
-			dev_err(map->dev, "Failed to write %x = %x: %d\n",
-				regs[i].reg, regs[i].def, ret);
-			return ret;
-		}
-	}
-
-	return 0;
-}
-
-/*
- * regmap_multi_reg_write(): Write multiple registers to the device
- *
- * where the set of register are supplied in any order
- *
- * @map: Register map to write to
- * @regs: Array of structures containing register,value to be written
- * @num_regs: Number of registers to write
- *
- * This function is intended to be used for writing a large block of data
- * atomically to the device in single transfer for those I2C client devices
- * that implement this alternative block write mode.
- *
- * A value of zero will be returned on success, a negative errno will
- * be returned in error cases.
- */
-int regmap_multi_reg_write(struct regmap *map, const struct reg_default *regs,
-				int num_regs)
-{
-	int ret;
-
-	mutex_lock(&map->lock);
-	ret = _regmap_multi_reg_write(map, regs, num_regs);
-
-	mutex_unlock(&map->lock);
-
-	return ret;
-}
-EXPORT_SYMBOL_GPL(regmap_multi_reg_write);
-
-/*
- * regmap_multi_reg_write_bypassed(): Write multiple registers to the
- *                                    device but not the cache
- *
- * where the set of register are supplied in any order
- *
- * @map: Register map to write to
- * @regs: Array of structures containing register,value to be written
- * @num_regs: Number of registers to write
- *
- * This function is intended to be used for writing a large block of data
- * atomically to the device in single transfer for those I2C client devices
- * that implement this alternative block write mode.
- *
- * A value of zero will be returned on success, a negative errno will
- * be returned in error cases.
- */
-int regmap_multi_reg_write_bypassed(struct regmap *map,
-				    const struct reg_default *regs,
-				    int num_regs)
-{
-	int ret;
-	bool bypass;
-
-	mutex_lock(&map->lock);
-
-	bypass = map->cache_bypass;
-	map->cache_bypass = true;
-
-	ret = _regmap_multi_reg_write(map, regs, num_regs);
-
-	map->cache_bypass = bypass;
-
-	mutex_unlock(&map->lock);
-
-	return ret;
-}
-EXPORT_SYMBOL_GPL(regmap_multi_reg_write_bypassed);
 
 static int _regmap_raw_read(struct regmap *map, unsigned int reg, void *val,
 			    unsigned int val_len)
@@ -845,6 +766,9 @@ int regmap_read(struct regmap *map, unsigned int reg, unsigned int *val)
 {
 	int ret;
 
+	if (reg % map->reg_stride)
+		return -EINVAL;
+
 	map->lock(map);
 
 	ret = _regmap_read(map, reg, val);
@@ -876,6 +800,8 @@ int regmap_raw_read(struct regmap *map, unsigned int reg, void *val,
 
 	if (val_len % map->format.val_bytes)
 		return -EINVAL;
+	if (reg % map->reg_stride)
+		return -EINVAL;
 
 	map->lock(map);
 
@@ -889,7 +815,8 @@ int regmap_raw_read(struct regmap *map, unsigned int reg, void *val,
 		 * cost as we expect to hit the cache.
 		 */
 		for (i = 0; i < val_count; i++) {
-			ret = _regmap_read(map, reg + i, &v);
+			ret = _regmap_read(map, reg + (i * map->reg_stride),
+					   &v);
 			if (ret != 0)
 				goto out;
 
@@ -924,6 +851,8 @@ int regmap_bulk_read(struct regmap *map, unsigned int reg, void *val,
 
 	if (!map->format.parse_val)
 		return -EINVAL;
+	if (reg % map->reg_stride)
+		return -EINVAL;
 
 	if (vol || map->cache_type == REGCACHE_NONE) {
 		ret = regmap_raw_read(map, reg, val, val_bytes * val_count);
@@ -934,11 +863,10 @@ int regmap_bulk_read(struct regmap *map, unsigned int reg, void *val,
 			map->format.parse_val(val + i);
 	} else {
 		for (i = 0; i < val_count; i++) {
-			unsigned int ival;
-			ret = regmap_read(map, reg + i, &ival);
+			ret = regmap_read(map, reg + (i * map->reg_stride),
+					  val + (i * val_bytes));
 			if (ret != 0)
 				return ret;
-			memcpy(val + (i * val_bytes), &ival, val_bytes);
 		}
 	}
 
