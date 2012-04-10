@@ -68,29 +68,28 @@ struct voltage_map_desc {
 	int min;
 	int max;
 	int step;
-	unsigned int n_bits;
 };
 
-/* Voltage maps in uV */
+/* Voltage maps in mV */
 static const struct voltage_map_desc ldo_voltage_map_desc = {
-	.min = 800000,	.max = 3950000,	.step = 50000,	.n_bits = 6,
+	.min = 800,	.max = 3950,	.step = 50,
 }; /* LDO1 ~ 18, 21 all */
 
 static const struct voltage_map_desc buck1245_voltage_map_desc = {
-	.min = 650000,	.max = 2225000,	.step = 25000,	.n_bits = 6,
+	.min = 650,	.max = 2225,	.step = 25,
 }; /* Buck1, 2, 4, 5 */
 
 static const struct voltage_map_desc buck37_voltage_map_desc = {
-	.min = 750000,	.max = 3900000,	.step = 50000,	.n_bits = 6,
+	.min = 750,	.max = 3900,	.step = 50,
 }; /* Buck3, 7 */
 
-/* current map in uA */
+/* current map in mA */
 static const struct voltage_map_desc charger_current_map_desc = {
-	.min = 200000,	.max = 950000,	.step = 50000,	.n_bits = 4,
+	.min = 200,	.max = 950,	.step = 50,
 };
 
 static const struct voltage_map_desc topoff_current_map_desc = {
-	.min = 50000,	.max = 200000,	.step = 10000,	.n_bits = 4,
+	.min = 50,	.max = 200,	.step = 10,
 };
 
 static const struct voltage_map_desc *reg_voltage_map[] = {
@@ -194,7 +193,7 @@ static int max8997_list_voltage(struct regulator_dev *rdev,
 	if (val > desc->max)
 		return -EINVAL;
 
-	return val;
+	return val * 1000;
 }
 
 static int max8997_get_enable_register(struct regulator_dev *rdev,
@@ -431,9 +430,6 @@ static inline int max8997_get_voltage_proper_val(
 	if (desc->min + desc->step * i > max_vol)
 		return -EINVAL;
 
-	if (i >= (1 << desc->n_bits))
-		return -EINVAL;
-
 	return i;
 }
 
@@ -497,6 +493,7 @@ static int max8997_set_voltage_ldobuck(struct regulator_dev *rdev,
 {
 	struct max8997_data *max8997 = rdev_get_drvdata(rdev);
 	struct i2c_client *i2c = max8997->iodev->i2c;
+	int min_vol = min_uV / 1000, max_vol = max_uV / 1000;
 	const struct voltage_map_desc *desc;
 	int rid = rdev_get_id(rdev);
 	int reg, shift = 0, mask, ret;
@@ -522,7 +519,7 @@ static int max8997_set_voltage_ldobuck(struct regulator_dev *rdev,
 
 	desc = reg_voltage_map[rid];
 
-	i = max8997_get_voltage_proper_val(desc, min_uV, max_uV);
+	i = max8997_get_voltage_proper_val(desc, min_vol, max_vol);
 	if (i < 0)
 		return i;
 
@@ -541,7 +538,7 @@ static int max8997_set_voltage_ldobuck(struct regulator_dev *rdev,
 		/* If the voltage is increasing */
 		if (org < i)
 			udelay(DIV_ROUND_UP(desc->step * (i - org),
-						max8997->ramp_delay * 1000));
+						max8997->ramp_delay));
 	}
 
 	return ret;
@@ -640,6 +637,7 @@ static int max8997_set_voltage_buck(struct regulator_dev *rdev,
 	const struct voltage_map_desc *desc;
 	int new_val, new_idx, damage, tmp_val, tmp_idx, tmp_dmg;
 	bool gpio_dvs_mode = false;
+	int min_vol = min_uV / 1000, max_vol = max_uV / 1000;
 
 	if (rid < MAX8997_BUCK1 || rid > MAX8997_BUCK7)
 		return -EINVAL;
@@ -664,7 +662,7 @@ static int max8997_set_voltage_buck(struct regulator_dev *rdev,
 						selector);
 
 	desc = reg_voltage_map[rid];
-	new_val = max8997_get_voltage_proper_val(desc, min_uV, max_uV);
+	new_val = max8997_get_voltage_proper_val(desc, min_vol, max_vol);
 	if (new_val < 0)
 		return new_val;
 
@@ -683,7 +681,7 @@ static int max8997_set_voltage_buck(struct regulator_dev *rdev,
 		}
 
 		new_val++;
-	} while (desc->min + desc->step * new_val <= desc->max);
+	} while (desc->min + desc->step + new_val <= desc->max);
 
 	new_idx = tmp_idx;
 	new_val = tmp_val;
@@ -952,8 +950,8 @@ static __devinit int max8997_pmic_probe(struct platform_device *pdev)
 		max8997->buck1_vol[i] = ret =
 			max8997_get_voltage_proper_val(
 					&buck1245_voltage_map_desc,
-					pdata->buck1_voltage[i],
-					pdata->buck1_voltage[i] +
+					pdata->buck1_voltage[i] / 1000,
+					pdata->buck1_voltage[i] / 1000 +
 					buck1245_voltage_map_desc.step);
 		if (ret < 0)
 			goto err_alloc;
@@ -961,8 +959,8 @@ static __devinit int max8997_pmic_probe(struct platform_device *pdev)
 		max8997->buck2_vol[i] = ret =
 			max8997_get_voltage_proper_val(
 					&buck1245_voltage_map_desc,
-					pdata->buck2_voltage[i],
-					pdata->buck2_voltage[i] +
+					pdata->buck2_voltage[i] / 1000,
+					pdata->buck2_voltage[i] / 1000 +
 					buck1245_voltage_map_desc.step);
 		if (ret < 0)
 			goto err_alloc;
@@ -970,8 +968,8 @@ static __devinit int max8997_pmic_probe(struct platform_device *pdev)
 		max8997->buck5_vol[i] = ret =
 			max8997_get_voltage_proper_val(
 					&buck1245_voltage_map_desc,
-					pdata->buck5_voltage[i],
-					pdata->buck5_voltage[i] +
+					pdata->buck5_voltage[i] / 1000,
+					pdata->buck5_voltage[i] / 1000 +
 					buck1245_voltage_map_desc.step);
 		if (ret < 0)
 			goto err_alloc;
