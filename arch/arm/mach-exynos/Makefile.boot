@@ -1,10 +1,5 @@
-__ZRELADDR	:= $(shell /bin/bash -c 'printf "0x%08x" \
-		     $$[$(CONFIG_EXYNOS_MEM_BASE) + 0x8000]')
+   zreladdr-y	+= 0x40008000
+params_phys-y	:= 0x40000100
 
-__PARAMS_PHYS	:= $(shell /bin/bash -c 'printf "0x%08x" \
-	                     $$[$(CONFIG_EXYNOS_MEM_BASE) + 0x100]')
-
-zreladdr-y	+= $(__ZRELADDR)
-params_phys-y	:= $(__PARAMS_PHYS)
-
-dtb-$(CONFIG_MACH_EXYNOS5_DT) += exynos5410-smdk5410.dtb
+dtb-$(CONFIG_MACH_EXYNOS4_DT) += exynos4210-origen.dtb exynos4210-smdkv310.dtb
+dtb-$(CONFIG_MACH_EXYNOS5_DT) += exynos5250-smdk5250.dtb
