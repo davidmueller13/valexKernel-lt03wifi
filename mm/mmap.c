@@ -222,7 +222,6 @@ void unlink_file_vma(struct vm_area_struct *vma)
 		mutex_lock(&mapping->i_mmap_mutex);
 		__remove_shared_vm_struct(vma, file, mapping);
 		mutex_unlock(&mapping->i_mmap_mutex);
-		uprobe_munmap(vma);
 	}
 }
 
@@ -582,10 +581,11 @@ again:			remove_next = 1 + (end > next->vm_end);
 		mapping = file->f_mapping;
 		if (!(vma->vm_flags & VM_NONLINEAR)) {
 			root = &mapping->i_mmap;
-			uprobe_munmap(vma);
+			uprobe_munmap(vma, vma->vm_start, vma->vm_end);
 
 			if (adjust_next)
-				uprobe_munmap(next);
+				uprobe_munmap(next, next->vm_start,
+							next->vm_end);
 		}
 
 		mutex_lock(&mapping->i_mmap_mutex);
@@ -666,7 +666,7 @@ again:			remove_next = 1 + (end > next->vm_end);
 
 	if (remove_next) {
 		if (file) {
-			uprobe_munmap(next);
+			uprobe_munmap(next, next->vm_start, next->vm_end);
 			fput(file);
 			if (next->vm_flags & VM_EXECUTABLE)
 				removed_exe_file_vma(mm);
