@@ -701,6 +701,13 @@ static int s3c_rtc_resume(struct platform_device *pdev)
 #define s3c_rtc_resume  NULL
 #endif
 
+static struct s3c_rtc_drv_data s3c_rtc_drv_data_array[] = {
+	[TYPE_S3C2410] = { TYPE_S3C2410 },
+	[TYPE_S3C2416] = { TYPE_S3C2416 },
+	[TYPE_S3C2443] = { TYPE_S3C2443 },
+	[TYPE_S3C64XX] = { TYPE_S3C64XX },
+};
+
 #ifdef CONFIG_OF
 static struct s3c_rtc_drv_data s3c_rtc_drv_data_array[] = {
 	[TYPE_S3C2410] = { TYPE_S3C2410 },
