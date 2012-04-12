@@ -162,6 +162,8 @@ static void paz00_i2c_init(void)
 
 static void paz00_usb_init(void)
 {
+	tegra_ehci2_ulpi_phy_config.reset_gpio = TEGRA_ULPI_RST;
+
 	platform_device_register(&tegra_ehci2_device);
 	platform_device_register(&tegra_ehci3_device);
 }
