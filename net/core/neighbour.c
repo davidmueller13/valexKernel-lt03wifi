@@ -1502,7 +1502,7 @@ static void neigh_parms_destroy(struct neigh_parms *parms)
 
 static struct lock_class_key neigh_table_proxy_queue_class;
 
-void neigh_table_init_no_netlink(struct neigh_table *tbl)
+static void neigh_table_init_no_netlink(struct neigh_table *tbl)
 {
 	unsigned long now = jiffies;
 	unsigned long phsize;
@@ -1540,7 +1540,6 @@ void neigh_table_init_no_netlink(struct neigh_table *tbl)
 	tbl->last_flush = now;
 	tbl->last_rand	= now + tbl->parms.reachable_time * 20;
 }
-EXPORT_SYMBOL(neigh_table_init_no_netlink);
 
 void neigh_table_init(struct neigh_table *tbl)
 {
