@@ -12,10 +12,6 @@ obj-				:=
 
 # Core files
 
-obj-$(CONFIG_S5P_PM)		+= pm.o irq-pm.o
-obj-$(CONFIG_S5P_SLEEP)		+= sleep.o
-plus_sec := $(call as-instr,.arch_extension sec,+sec)
-AFLAGS_sleep.o :=-Wa,-march=armv7-a$(plus_sec)
 obj-$(CONFIG_S5P_HRT) 		+= s5p-time.o
 
 # devices
