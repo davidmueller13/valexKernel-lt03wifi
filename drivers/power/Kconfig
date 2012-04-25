@@ -325,3 +325,5 @@ config BATTERY_SAMSUNG
 	  Say Y to enable support for batteries with samsung chip.
 
 endif # POWER_SUPPLY
+
+source "drivers/power/avs/Kconfig"
