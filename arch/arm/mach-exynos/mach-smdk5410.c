@@ -336,6 +336,7 @@ MACHINE_START(SMDK5410, "SMDK5410")
 	.init_irq	= exynos5_init_irq,
 	.map_io		= smdk5410_map_io,
 	.init_machine	= smdk5410_machine_init,
+	.init_late	= exynos_init_late,
 	.timer		= &exynos4_timer,
 	.restart	= exynos5_restart,
 	.reserve	= exynos_reserve_mem,

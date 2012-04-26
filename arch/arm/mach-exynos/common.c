@@ -506,6 +506,11 @@ void exynos5_restart(char mode, const char *cmd)
 	__raw_writel(0x1, EXYNOS_SWRESET);
 }
 
+void __init exynos_init_late(void)
+{
+	exynos_pm_late_initcall();
+}
+
 #define REG_CPU_STATE_ADDR	(S5P_VA_SYSRAM_NS + 0x28)
 
 void set_boot_flag(unsigned int cpu, unsigned int mode)

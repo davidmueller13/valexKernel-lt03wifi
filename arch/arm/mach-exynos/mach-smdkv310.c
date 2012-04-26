@@ -390,6 +390,7 @@ MACHINE_START(SMDKC210, "SMDKC210")
 	.init_irq	= exynos4_init_irq,
 	.map_io		= smdkv310_map_io,
 	.init_machine	= smdkv310_machine_init,
+	.init_late	= exynos_init_late,
 	.timer		= &exynos4_timer,
 	.restart	= exynos4_restart,
 MACHINE_END

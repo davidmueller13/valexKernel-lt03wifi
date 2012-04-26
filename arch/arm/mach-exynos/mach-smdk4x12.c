@@ -480,6 +480,7 @@ MACHINE_START(SMDK4412, "SMDK4X12")
 	.init_irq	= exynos4_init_irq,
 	.map_io		= smdk4x12_map_io,
 	.init_machine	= smdk4x12_machine_init,
+	.init_late	= exynos_init_late,
 	.timer		= &exynos4_timer,
 	.restart	= exynos4_restart,
 MACHINE_END

@@ -2073,6 +2073,7 @@ MACHINE_START(SMDK5250, "SMDK5250")
 	.init_irq	= exynos5_init_irq,
 	.map_io		= smdk5250_map_io,
 	.init_machine	= smdk5250_machine_init,
+	.init_late	= exynos_init_late,
 	.timer		= &exynos4_timer,
 	.restart	= exynos5_restart,
 	.reserve	= exynos_reserve_mem,

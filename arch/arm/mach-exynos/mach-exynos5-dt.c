@@ -72,6 +72,7 @@ DT_MACHINE_START(EXYNOS5_DT, "SAMSUNG EXYNOS5 (Flattened Device Tree)")
 	.smp		= smp_ops(exynos_smp_ops),
 	.map_io		= exynos5_dt_map_io,
 	.init_machine	= exynos5_dt_machine_init,
+	.init_late	= exynos_init_late,
 	.timer		= &exynos4_timer,
 	.dt_compat	= exynos5_dt_compat,
 	.restart        = exynos5_restart,

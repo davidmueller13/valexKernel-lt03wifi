@@ -1115,6 +1115,7 @@ MACHINE_START(UNIVERSAL_C210, "UNIVERSAL_C210")
 	.init_irq	= exynos4_init_irq,
 	.map_io		= universal_map_io,
 	.init_machine	= universal_machine_init,
+	.init_late	= exynos_init_late,
 	.timer		= &s5p_timer,
 	.reserve        = &universal_reserve,
 	.restart	= exynos4_restart,

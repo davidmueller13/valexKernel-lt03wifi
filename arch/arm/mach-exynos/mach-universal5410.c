@@ -364,6 +364,7 @@ MACHINE_START(UNIVERSAL5410, "UNIVERSAL5410")
 	.init_irq	= exynos5_init_irq,
 	.map_io		= universal5410_map_io,
 	.init_machine	= universal5410_machine_init,
+	.init_late	= exynos_init_late,
 	.timer		= &exynos4_timer,
 	.restart	= exynos5_restart,
 	.reserve	= exynos_reserve_mem,

@@ -480,14 +480,9 @@ int exynos_pm_domain_power_control(struct exynos_pm_domain *domain,
 	return 0;
 }
 
-static __init int exynos_pm_domain_idle(void)
+int __init exynos_pm_late_initcall(void)
 {
 	pm_genpd_poweroff_unused();
 
 	return 0;
 }
-#ifdef CONFIG_S5P_DP
-late_initcall_sync(exynos_pm_domain_idle);
-#else
-late_initcall(exynos_pm_domain_idle);
-#endif

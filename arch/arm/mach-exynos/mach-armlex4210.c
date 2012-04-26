@@ -212,6 +212,7 @@ MACHINE_START(ARMLEX4210, "ARMLEX4210")
 	.init_irq	= exynos4_init_irq,
 	.map_io		= armlex4210_map_io,
 	.init_machine	= armlex4210_machine_init,
+	.init_late	= exynos_init_late,
 	.timer		= &exynos4_timer,
 	.restart	= exynos4_restart,
 MACHINE_END
