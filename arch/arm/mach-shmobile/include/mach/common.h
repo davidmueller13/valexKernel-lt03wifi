@@ -97,4 +97,18 @@ int shmobile_cpuidle_init(void);
 static inline int shmobile_cpuidle_init(void) { return 0; }
 #endif
 
+extern void shmobile_init_late(void);
+
+#ifdef CONFIG_SUSPEND
+int shmobile_suspend_init(void);
+#else
+static inline int shmobile_suspend_init(void) { return 0; }
+#endif
+
+#ifdef CONFIG_CPU_IDLE
+int shmobile_cpuidle_init(void);
+#else
+static inline int shmobile_cpuidle_init(void) { return 0; }
+#endif
+
 #endif /* __ARCH_MACH_COMMON_H */
