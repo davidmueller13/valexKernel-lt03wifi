@@ -29,8 +29,6 @@
 
 #include "sigutil.h"
 
-#define _BLOCKABLE (~(sigmask(SIGKILL) | sigmask(SIGSTOP)))
-
 extern void fpsave(unsigned long *fpregs, unsigned long *fsr,
 		   void *fpqueue, unsigned long *fpqdepth);
 extern void fpload(unsigned long *fpregs, unsigned long *fsr);
@@ -140,7 +138,6 @@ asmlinkage void do_sigreturn(struct pt_regs *regs)
 	if (err)
 		goto segv_and_exit;
 
-	sigdelsetmask(&set, ~_BLOCKABLE);
 	set_current_blocked(&set);
 	return;
 
@@ -207,7 +204,6 @@ asmlinkage void do_rt_sigreturn(struct pt_regs *regs)
 			goto segv;
 	}
 
-	sigdelsetmask(&set, ~_BLOCKABLE);
 	set_current_blocked(&set);
 	return;
 segv:

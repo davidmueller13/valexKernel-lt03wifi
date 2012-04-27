@@ -48,9 +48,6 @@
 #define DBG(LEVEL, ...)
 #endif
 	
-
-#define _BLOCKABLE (~(sigmask(SIGKILL) | sigmask(SIGSTOP)))
-
 /* gcc will complain if a pointer is cast to an integer of different
  * size.  If you really need to do this (and we do for an ELF32 user
  * application in an ELF64 kernel) then you have to do a cast to an
@@ -109,6 +106,7 @@ sys_rt_sigreturn(struct pt_regs *regs, int in_syscall)
 		sigframe_size = PARISC_RT_SIGFRAME_SIZE32;
 #endif
 
+	current_thread_info()->restart_block.fn = do_no_restart_syscall;
 
 	/* Unwind the user stack to get the rt_sigframe structure. */
 	frame = (struct rt_sigframe __user *)
@@ -130,11 +128,7 @@ sys_rt_sigreturn(struct pt_regs *regs, int in_syscall)
 			goto give_sigsegv;
 	}
 		
-	sigdelsetmask(&set, ~_BLOCKABLE);
-	spin_lock_irq(&current->sighand->siglock);
-	current->blocked = set;
-	recalc_sigpending();
-	spin_unlock_irq(&current->sighand->siglock);
+	set_current_blocked(&set);
 
 	/* Good thing we saved the old gr[30], eh? */
 #ifdef CONFIG_64BIT
@@ -455,12 +449,7 @@ handle_signal(unsigned long sig, siginfo_t *info, struct k_sigaction *ka,
 	if (!setup_rt_frame(sig, ka, info, oldset, regs, in_syscall))
 		return 0;
 
-	spin_lock_irq(&current->sighand->siglock);
-	sigorsets(&current->blocked,&current->blocked,&ka->sa.sa_mask);
-	if (!(ka->sa.sa_flags & SA_NODEFER))
-		sigaddset(&current->blocked,sig);
-	recalc_sigpending();
-	spin_unlock_irq(&current->sighand->siglock);
+	block_sigmask(ka, sig);
 
 	tracehook_signal_handler(sig, info, ka, regs, 
 		test_thread_flag(TIF_SINGLESTEP) ||
@@ -478,8 +467,6 @@ syscall_restart(struct pt_regs *regs, struct k_sigaction *ka)
 	/* Check the return code */
 	switch (regs->gr[28]) {
 	case -ERESTART_RESTARTBLOCK:
-		current_thread_info()->restart_block.fn =
-			do_no_restart_syscall;
 	case -ERESTARTNOHAND:
 		DBG(1,"ERESTARTNOHAND: returning -EINTR\n");
 		regs->gr[28] = -EINTR;
@@ -622,8 +609,7 @@ do_signal(struct pt_regs *regs, long in_syscall)
 
 void do_notify_resume(struct pt_regs *regs, long in_syscall)
 {
-	if (test_thread_flag(TIF_SIGPENDING) ||
-	    test_thread_flag(TIF_RESTORE_SIGMASK))
+	if (test_thread_flag(TIF_SIGPENDING))
 		do_signal(regs, in_syscall);
 
 	if (test_thread_flag(TIF_NOTIFY_RESUME)) {
