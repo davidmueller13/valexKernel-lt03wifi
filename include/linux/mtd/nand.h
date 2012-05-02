@@ -161,8 +161,6 @@ typedef enum {
  * Option constants for bizarre disfunctionality and real
  * features.
  */
-/* Chip can not auto increment pages */
-#define NAND_NO_AUTOINCR	0x00000001
 /* Buswidth is 16 bit */
 #define NAND_BUSWIDTH_16	0x00000002
 /* Device supports partial programming without padding */
@@ -207,13 +205,15 @@ typedef enum {
 	(NAND_NO_PADDING | NAND_CACHEPRG | NAND_COPYBACK)
 
 /* Macros to identify the above */
-#define NAND_CANAUTOINCR(chip) (!(chip->options & NAND_NO_AUTOINCR))
 #define NAND_MUST_PAD(chip) (!(chip->options & NAND_NO_PADDING))
 #define NAND_HAS_CACHEPROG(chip) ((chip->options & NAND_CACHEPRG))
 #define NAND_HAS_COPYBACK(chip) ((chip->options & NAND_COPYBACK))
 /* Large page NAND with SOFT_ECC should support subpage reads */
 #define NAND_SUBPAGE_READ(chip) ((chip->ecc.mode == NAND_ECC_SOFT) \
 					&& (chip->page_shift > 9))
+
+/* Mask to zero out the chip options, which come from the id table */
+#define NAND_CHIPOPTIONS_MSK	0x0000ffff
 
 /* Non chip related options */
 /* This option skips the bbt scan during initialization. */
