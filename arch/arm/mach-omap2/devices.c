@@ -17,7 +17,6 @@
 #include <linux/err.h>
 #include <linux/slab.h>
 #include <linux/of.h>
-#include <linux/platform_data/omap4-keypad.h>
 
 #include <mach/hardware.h>
 #include <mach/irqs.h>
@@ -25,8 +24,9 @@
 #include <asm/mach/map.h>
 #include <asm/pmu.h>
 
-#include "iomap.h"
+#include <plat/tc.h>
 #include <plat/board.h>
+#include <plat/mcbsp.h>
 #include <plat/mmc.h>
 #include <plat/dma.h>
 #include <plat/omap_hwmod.h>
@@ -42,6 +42,7 @@
 
 static int __init omap3_l3_init(void)
 {
+	int l;
 	struct omap_hwmod *oh;
 	struct platform_device *pdev;
 	char oh_name[L3_MODULES_MAX_LEN];
@@ -53,7 +54,7 @@ static int __init omap3_l3_init(void)
 	if (!(cpu_is_omap34xx()))
 		return -ENODEV;
 
-	snprintf(oh_name, L3_MODULES_MAX_LEN, "l3_main");
+	l = snprintf(oh_name, L3_MODULES_MAX_LEN, "l3_main");
 
 	oh = omap_hwmod_lookup(oh_name);
 
@@ -71,7 +72,7 @@ postcore_initcall(omap3_l3_init);
 
 static int __init omap4_l3_init(void)
 {
-	int i;
+	int l, i;
 	struct omap_hwmod *oh[3];
 	struct platform_device *pdev;
 	char oh_name[L3_MODULES_MAX_LEN];
@@ -88,7 +89,7 @@ static int __init omap4_l3_init(void)
 		return -ENODEV;
 
 	for (i = 0; i < L3_MODULES; i++) {
-		snprintf(oh_name, L3_MODULES_MAX_LEN, "l3_main_%d", i+1);
+		l = snprintf(oh_name, L3_MODULES_MAX_LEN, "l3_main_%d", i+1);
 
 		oh[i] = omap_hwmod_lookup(oh_name);
 		if (!(oh[i]))
@@ -275,7 +276,7 @@ int __init omap4_keyboard_init(struct omap4_keypad_platform_data
 }
 
 #if defined(CONFIG_OMAP_MBOX_FWK) || defined(CONFIG_OMAP_MBOX_FWK_MODULE)
-static inline void __init omap_init_mbox(void)
+static inline void omap_init_mbox(void)
 {
 	struct omap_hwmod *oh;
 	struct platform_device *pdev;
@@ -303,8 +304,29 @@ static struct platform_device omap_pcm = {
 	.id	= -1,
 };
 
+/*
+ * OMAP2420 has 2 McBSP ports
+ * OMAP2430 has 5 McBSP ports
+ * OMAP3 has 5 McBSP ports
+ * OMAP4 has 4 McBSP ports
+ */
+OMAP_MCBSP_PLATFORM_DEVICE(1);
+OMAP_MCBSP_PLATFORM_DEVICE(2);
+OMAP_MCBSP_PLATFORM_DEVICE(3);
+OMAP_MCBSP_PLATFORM_DEVICE(4);
+OMAP_MCBSP_PLATFORM_DEVICE(5);
+
 static void omap_init_audio(void)
 {
+	platform_device_register(&omap_mcbsp1);
+	platform_device_register(&omap_mcbsp2);
+	if (cpu_is_omap243x() || cpu_is_omap34xx() || cpu_is_omap44xx()) {
+		platform_device_register(&omap_mcbsp3);
+		platform_device_register(&omap_mcbsp4);
+	}
+	if (cpu_is_omap243x() || cpu_is_omap34xx())
+		platform_device_register(&omap_mcbsp5);
+
 	platform_device_register(&omap_pcm);
 }
 
@@ -315,7 +337,7 @@ static inline void omap_init_audio(void) {}
 #if defined(CONFIG_SND_OMAP_SOC_MCPDM) || \
 		defined(CONFIG_SND_OMAP_SOC_MCPDM_MODULE)
 
-static void __init omap_init_mcpdm(void)
+static void omap_init_mcpdm(void)
 {
 	struct omap_hwmod *oh;
 	struct platform_device *pdev;
@@ -336,7 +358,7 @@ static inline void omap_init_mcpdm(void) {}
 #if defined(CONFIG_SND_OMAP_SOC_DMIC) || \
 		defined(CONFIG_SND_OMAP_SOC_DMIC_MODULE)
 
-static void __init omap_init_dmic(void)
+static void omap_init_dmic(void)
 {
 	struct omap_hwmod *oh;
 	struct platform_device *pdev;
@@ -358,7 +380,7 @@ static inline void omap_init_dmic(void) {}
 
 #include <plat/mcspi.h>
 
-static int __init omap_mcspi_init(struct omap_hwmod *oh, void *unused)
+static int omap_mcspi_init(struct omap_hwmod *oh, void *unused)
 {
 	struct platform_device *pdev;
 	char *name = "omap2_mcspi";
@@ -632,7 +654,9 @@ void __init omap242x_init_mmc(struct omap_mmc_platform_data **mmc_data)
 /*-------------------------------------------------------------------------*/
 
 #if defined(CONFIG_HDQ_MASTER_OMAP) || defined(CONFIG_HDQ_MASTER_OMAP_MODULE)
+#if defined(CONFIG_SOC_OMAP2430) || defined(CONFIG_SOC_OMAP3430)
 #define OMAP_HDQ_BASE	0x480B2000
+#endif
 static struct resource omap_hdq_resources[] = {
 	{
 		.start		= OMAP_HDQ_BASE,
@@ -655,10 +679,7 @@ static struct platform_device omap_hdq_dev = {
 };
 static inline void omap_hdq_init(void)
 {
-	if (cpu_is_omap2420())
-		return;
-
-	platform_device_register(&omap_hdq_dev);
+	(void) platform_device_register(&omap_hdq_dev);
 }
 #else
 static inline void omap_hdq_init(void) {}
@@ -701,10 +722,13 @@ static int __init omap2_init_devices(void)
 	 */
 	omap_init_audio();
 	omap_init_mcpdm();
-	omap_init_dmic();
 	omap_init_camera();
 	omap_init_mbox();
-	omap_init_mcspi();
+	/* If dtb is there, the devices will be created dynamically */
+	if (!of_have_populated_dt()) {
+		omap_init_dmic();
+		omap_init_mcspi();
+	}
 	omap_init_pmu();
 	omap_hdq_init();
 	omap_init_sti();
