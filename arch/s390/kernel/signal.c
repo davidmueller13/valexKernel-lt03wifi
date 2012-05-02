@@ -59,15 +59,8 @@ typedef struct
 SYSCALL_DEFINE3(sigsuspend, int, history0, int, history1, old_sigset_t, mask)
 {
 	sigset_t blocked;
-
-	current->saved_sigmask = current->blocked;
-	mask &= _BLOCKABLE;
 	siginitset(&blocked, mask);
-	set_current_blocked(&blocked);
-	set_current_state(TASK_INTERRUPTIBLE);
-	schedule();
-	set_restore_sigmask();
-	return -ERESTARTNOHAND;
+	return sigsuspend(&blocked);
 }
 
 SYSCALL_DEFINE3(sigaction, int, sig, const struct old_sigaction __user *, act,
@@ -148,10 +141,6 @@ static int restore_sigregs(struct pt_regs *regs, _sigregs __user *sregs)
 	/* Use regs->psw.mask instead of psw_user_bits to preserve PER bit. */
 	regs->psw.mask = (regs->psw.mask & ~PSW_MASK_USER) |
 		(user_sregs.regs.psw.mask & PSW_MASK_USER);
-	/* Check for invalid user address space control. */
-	if ((regs->psw.mask & PSW_MASK_ASC) >= (psw_kernel_bits & PSW_MASK_ASC))
-		regs->psw.mask = (psw_user_bits & PSW_MASK_ASC) |
-			(regs->psw.mask & ~PSW_MASK_ASC);
 	/* Check for invalid amode */
 	if (regs->psw.mask & PSW_MASK_EA)
 		regs->psw.mask |= PSW_MASK_BA;
@@ -239,13 +228,6 @@ get_sigframe(struct k_sigaction *ka, struct pt_regs * regs, size_t frame_size)
 			sp = current->sas_ss_sp + current->sas_ss_size;
 	}
 
-	/* This is the legacy signal stack switching. */
-	else if (!user_mode(regs) &&
-		 !(ka->sa.sa_flags & SA_RESTORER) &&
-		 ka->sa.sa_restorer) {
-		sp = (unsigned long) ka->sa.sa_restorer;
-	}
-
 	return (void __user *)((sp - frame_size) & -8ul);
 }
 
@@ -298,10 +280,7 @@ static int setup_frame(int sig, struct k_sigaction *ka,
 
 	/* Set up registers for signal handler */
 	regs->gprs[15] = (unsigned long) frame;
-	/* Force default amode and default user address space control. */
-	regs->psw.mask = PSW_MASK_EA | PSW_MASK_BA |
-		(psw_user_bits & PSW_MASK_ASC) |
-		(regs->psw.mask & ~PSW_MASK_ASC);
+	regs->psw.mask |= PSW_MASK_EA | PSW_MASK_BA;	/* 64 bit amode */
 	regs->psw.addr = (unsigned long) ka->sa.sa_handler | PSW_ADDR_AMODE;
 
 	regs->gprs[2] = map_signal(sig);
@@ -374,10 +353,7 @@ static int setup_rt_frame(int sig, struct k_sigaction *ka, siginfo_t *info,
 
 	/* Set up registers for signal handler */
 	regs->gprs[15] = (unsigned long) frame;
-	/* Force default amode and default user address space control. */
-	regs->psw.mask = PSW_MASK_EA | PSW_MASK_BA |
-		(psw_user_bits & PSW_MASK_ASC) |
-		(regs->psw.mask & ~PSW_MASK_ASC);
+	regs->psw.mask |= PSW_MASK_EA | PSW_MASK_BA;	/* 64 bit amode */
 	regs->psw.addr = (unsigned long) ka->sa.sa_handler | PSW_ADDR_AMODE;
 
 	regs->gprs[2] = map_signal(sig);
@@ -422,21 +398,7 @@ void do_signal(struct pt_regs *regs)
 	siginfo_t info;
 	int signr;
 	struct k_sigaction ka;
-	sigset_t *oldset;
-
-	/*
-	 * We want the common case to go fast, which
-	 * is why we may in certain cases get here from
-	 * kernel mode. Just return without doing anything
-	 * if so.
-	 */
-	if (!user_mode(regs))
-		return;
-
-	if (test_thread_flag(TIF_RESTORE_SIGMASK))
-		oldset = &current->saved_sigmask;
-	else
-		oldset = &current->blocked;
+	sigset_t *oldset = sigmask_to_save();
 
 	/*
 	 * Get signal to deliver. When running under ptrace, at this point
