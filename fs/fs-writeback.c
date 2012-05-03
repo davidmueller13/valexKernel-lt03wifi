@@ -465,6 +465,10 @@ __writeback_single_inode(struct inode *inode, struct bdi_writeback *wb,
 	int ret;
 
 	WARN_ON(!(inode->i_state & I_SYNC));
+	/* Set I_SYNC, reset I_DIRTY_PAGES */
+	inode->i_state |= I_SYNC;
+	spin_unlock(&inode->i_lock);
+	spin_unlock(&wb->list_lock);
 
 	ret = do_writepages(mapping, wbc);
 
@@ -532,6 +536,47 @@ writeback_single_inode(struct inode *inode, struct bdi_writeback *wb,
 		 * away under us.
 		 */
 		__inode_wait_for_writeback(inode);
+		if ((inode->i_state & I_DIRTY) &&
+		    (wbc->sync_mode == WB_SYNC_ALL || wbc->tagged_writepages))
+			inode->dirtied_when = jiffies;
+
+		if (mapping_tagged(mapping, PAGECACHE_TAG_DIRTY)) {
+			/*
+			 * We didn't write back all the pages.  nfs_writepages()
+			 * sometimes bales out without doing anything.
+			 */
+			if (wbc->nr_to_write <= 0) {
+				/*
+				 * slice used up: queue for next turn
+				 */
+				requeue_io(inode, wb);
+			} else {
+				/*
+				 * Writeback blocked by something other than
+				 * congestion. Delay the inode for some time to
+				 * avoid spinning on the CPU (100% iowait)
+				 * retrying writeback of the dirty page/inode
+				 * that cannot be performed immediately.
+				 */
+				redirty_tail(inode, wb);
+			}
+		} else if (inode->i_state & I_DIRTY) {
+			/*
+			 * Filesystems can dirty the inode during writeback
+			 * operations, such as delayed allocation during
+			 * submission or metadata updates after data IO
+			 * completion.
+			 */
+			redirty_tail(inode, wb);
+		} else {
+			/*
+			 * The inode is clean.  At this point we either have
+			 * a reference to the inode or it's on it's way out.
+			 * No need to add it back to the LRU.
+			 */
+			list_del_init(&inode->i_wb_list);
+		}
+>>>>>>> cacbf6b... writeback: Move I_DIRTY_PAGES handling
 	}
 	WARN_ON(inode->i_state & I_SYNC);
 	/*
