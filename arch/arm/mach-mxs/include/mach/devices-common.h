@@ -82,7 +82,7 @@ struct platform_device * __init mxs_add_mxs_i2c(
 		const struct mxs_mxs_i2c_data *data);
 
 /* mmc */
-#include <mach/mmc.h>
+#include <linux/mmc/mxs-mmc.h>
 struct mxs_mxs_mmc_data {
 	int id;
 	resource_size_t iobase;
