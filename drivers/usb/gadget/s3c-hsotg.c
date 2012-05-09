@@ -30,12 +30,12 @@
 
 #include <linux/usb/ch9.h>
 #include <linux/usb/gadget.h>
+#include <linux/platform_data/s3c-hsotg.h>
 
 #include <mach/map.h>
 
 #include <plat/regs-usb-hsotg-phy.h>
 #include "s3c-hsotg.h"
-#include <linux/platform_data/s3c-hsotg.h>
 #include <mach/regs-sys.h>
 #include <plat/cpu.h>
 

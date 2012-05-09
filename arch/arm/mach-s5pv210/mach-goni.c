@@ -27,6 +27,7 @@
 #include <linux/gpio.h>
 #include <linux/mmc/host.h>
 #include <linux/interrupt.h>
+#include <linux/platform_data/s3c-hsotg.h>
 
 #include <asm/mach/arch.h>
 #include <asm/mach/map.h>
@@ -49,7 +50,6 @@
 #include <plat/mfc.h>
 #include <plat/regs-fb-v4.h>
 #include <plat/camport.h>
-#include <linux/platform_data/s3c-hsotg.h>
 
 #include <media/v4l2-mediabus.h>
 #include <media/s5p_fimc.h>
