@@ -25,7 +25,7 @@
 #include <linux/mmc/host.h>
 #include <linux/fb.h>
 #include <linux/pwm_backlight.h>
-#include <linux/platform_data/s3c-hsotg.h>
+#include <drm/exynos_drm.h>
 
 #include <video/platform_lcd.h>
 #include <media/m5mols.h>
@@ -212,6 +212,29 @@ static struct platform_device nuri_gpio_keys = {
 	},
 };
 
+#ifdef CONFIG_DRM_EXYNOS
+static struct exynos_drm_fimd_pdata drm_fimd_pdata = {
+	.panel = {
+		.timing	= {
+			.xres		= 1024,
+			.yres		= 600,
+			.hsync_len	= 40,
+			.left_margin	= 79,
+			.right_margin	= 200,
+			.vsync_len	= 10,
+			.upper_margin	= 10,
+			.lower_margin	= 11,
+			.refresh	= 60,
+		},
+	},
+	.vidcon0	= VIDCON0_VIDOUT_RGB | VIDCON0_PNRMODE_RGB |
+			  VIDCON0_CLKSEL_LCD,
+	.vidcon1	= VIDCON1_INV_HSYNC | VIDCON1_INV_VSYNC,
+	.default_win	= 3,
+	.bpp		= 32,
+};
+
+#else
 /* Frame Buffer */
 static struct s3c_fb_pd_win nuri_fb_win0 = {
 	.win_mode = {
@@ -238,6 +261,7 @@ static struct s3c_fb_platdata nuri_fb_pdata __initdata = {
 	.vidcon1	= VIDCON1_INV_HSYNC | VIDCON1_INV_VSYNC,
 	.setup_gpio	= exynos4_fimd0_gpio_setup_24bpp,
 };
+#endif
 
 static void nuri_lcd_power_on(struct plat_lcd_data *pd, unsigned int power)
 {
@@ -1301,6 +1325,9 @@ static struct platform_device *nuri_devices[] __initdata = {
 	&cam_vdda_fixed_rdev,
 	&cam_8m_12v_fixed_rdev,
 	&exynos4_bus_devfreq,
+#ifdef CONFIG_DRM_EXYNOS
+	&exynos_device_drm,
+#endif
 };
 
 static void __init nuri_map_io(void)
@@ -1333,7 +1360,12 @@ static void __init nuri_machine_init(void)
 	i2c_register_board_info(9, i2c9_devs, ARRAY_SIZE(i2c9_devs));
 	s3c_i2c6_set_platdata(&nuri_i2c6_platdata);
 
+#ifdef CONFIG_DRM_EXYNOS
+	s5p_device_fimd0.dev.platform_data = &drm_fimd_pdata;
+	exynos4_fimd0_gpio_setup_24bpp();
+#else
 	s5p_fimd0_set_platdata(&nuri_fb_pdata);
+#endif
 
 	nuri_camera_init();
 
