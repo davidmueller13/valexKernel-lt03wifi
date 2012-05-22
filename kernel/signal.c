@@ -161,7 +161,7 @@ void recalc_sigpending(void)
 
 #define SYNCHRONOUS_MASK \
 	(sigmask(SIGSEGV) | sigmask(SIGBUS) | sigmask(SIGILL) | \
-	 sigmask(SIGTRAP) | sigmask(SIGFPE))
+	 sigmask(SIGTRAP) | sigmask(SIGFPE) | sigmask(SIGSYS))
 
 int next_signal(struct sigpending *pending, sigset_t *mask)
 {
@@ -483,9 +483,6 @@ flush_signal_handlers(struct task_struct *t, int force_default)
 		if (force_default || ka->sa.sa_handler != SIG_IGN)
 			ka->sa.sa_handler = SIG_DFL;
 		ka->sa.sa_flags = 0;
-#ifdef __ARCH_HAS_SA_RESTORER
-		ka->sa.sa_restorer = NULL;
-#endif
 		sigemptyset(&ka->sa.sa_mask);
 		ka++;
 	}
@@ -681,17 +678,23 @@ int dequeue_signal(struct task_struct *tsk, sigset_t *mask, siginfo_t *info)
  * No need to set need_resched since signal event passing
  * goes through ->blocked
  */
-void signal_wake_up_state(struct task_struct *t, unsigned int state)
+void signal_wake_up(struct task_struct *t, int resume)
 {
+	unsigned int mask;
+
 	set_tsk_thread_flag(t, TIF_SIGPENDING);
+
 	/*
-	 * TASK_WAKEKILL also means wake it up in the stopped/traced/killable
+	 * For SIGKILL, we want to wake it up in the stopped/traced/killable
 	 * case. We don't check t->state here because there is a race with it
 	 * executing another processor and just now entering stopped state.
 	 * By using wake_up_state, we ensure the process will wake up and
 	 * handle its death signal.
 	 */
-	if (!wake_up_state(t, state | TASK_INTERRUPTIBLE))
+	mask = TASK_INTERRUPTIBLE;
+	if (resume)
+		mask |= TASK_WAKEKILL;
+	if (!wake_up_state(t, mask))
 		kick_process(t);
 }
 
@@ -839,7 +842,7 @@ static void ptrace_trap_notify(struct task_struct *t)
 	assert_spin_locked(&t->sighand->siglock);
 
 	task_set_jobctl_pending(t, JOBCTL_TRAP_NOTIFY);
-	ptrace_signal_wake_up(t, t->jobctl & JOBCTL_LISTENING);
+	signal_wake_up(t, t->jobctl & JOBCTL_LISTENING);
 }
 
 /*
@@ -1632,7 +1635,6 @@ bool do_notify_parent(struct task_struct *tsk, int sig)
 	unsigned long flags;
 	struct sighand_struct *psig;
 	bool autoreap = false;
-	cputime_t utime, stime;
 
 	BUG_ON(sig == -1);
 
@@ -1670,9 +1672,8 @@ bool do_notify_parent(struct task_struct *tsk, int sig)
 				       task_uid(tsk));
 	rcu_read_unlock();
 
-	task_cputime(tsk, &utime, &stime);
-	info.si_utime = cputime_to_clock_t(utime + tsk->signal->utime);
-	info.si_stime = cputime_to_clock_t(stime + tsk->signal->stime);
+	info.si_utime = cputime_to_clock_t(tsk->utime + tsk->signal->utime);
+	info.si_stime = cputime_to_clock_t(tsk->stime + tsk->signal->stime);
 
 	info.si_status = tsk->exit_code & 0x7f;
 	if (tsk->exit_code & 0x80)
@@ -1736,7 +1737,6 @@ static void do_notify_parent_cldstop(struct task_struct *tsk,
 	unsigned long flags;
 	struct task_struct *parent;
 	struct sighand_struct *sighand;
-	cputime_t utime, stime;
 
 	if (for_ptracer) {
 		parent = tsk->parent;
@@ -1755,9 +1755,8 @@ static void do_notify_parent_cldstop(struct task_struct *tsk,
 	info.si_uid = from_kuid_munged(task_cred_xxx(parent, user_ns), task_uid(tsk));
 	rcu_read_unlock();
 
-	task_cputime(tsk, &utime, &stime);
-	info.si_utime = cputime_to_clock_t(utime);
-	info.si_stime = cputime_to_clock_t(stime);
+	info.si_utime = cputime_to_clock_t(tsk->utime);
+	info.si_stime = cputime_to_clock_t(tsk->stime);
 
  	info.si_code = why;
  	switch (why) {
@@ -1798,10 +1797,6 @@ static inline int may_ptrace_stop(void)
 	 * If SIGKILL was already sent before the caller unlocked
 	 * ->siglock we must see ->core_state != NULL. Otherwise it
 	 * is safe to enter schedule().
-	 *
-	 * This is almost outdated, a task with the pending SIGKILL can't
-	 * block in TASK_TRACED. But PTRACE_EVENT_EXIT can be reported
-	 * after SIGKILL was already dequeued.
 	 */
 	if (unlikely(current->mm->core_state) &&
 	    unlikely(current->mm == current->parent->mm))
@@ -1927,7 +1922,6 @@ static void ptrace_stop(int exit_code, int why, int clear_code, siginfo_t *info)
 		if (gstop_done)
 			do_notify_parent_cldstop(current, false, why);
 
-		/* tasklist protects us from ptrace_freeze_traced() */
 		__set_current_state(TASK_RUNNING);
 		if (clear_code)
 			current->exit_code = 0;
@@ -2207,7 +2201,7 @@ relock:
 	 * Now that we woke up, it's crucial if we're supposed to be
 	 * frozen that we freeze now before running anything substantial.
 	 */
-	try_to_freeze_nowarn();
+	try_to_freeze();
 
 	spin_lock_irq(&sighand->siglock);
 	/*
@@ -2723,6 +2717,13 @@ int copy_siginfo_to_user(siginfo_t __user *to, siginfo_t *from)
 		err |= __put_user(from->si_uid, &to->si_uid);
 		err |= __put_user(from->si_ptr, &to->si_ptr);
 		break;
+#ifdef __ARCH_SIGSYS
+	case __SI_SYS:
+		err |= __put_user(from->si_call_addr, &to->si_call_addr);
+		err |= __put_user(from->si_syscall, &to->si_syscall);
+		err |= __put_user(from->si_arch, &to->si_arch);
+		break;
+#endif
 	default: /* this is just in case for now ... */
 		err |= __put_user(from->si_pid, &to->si_pid);
 		err |= __put_user(from->si_uid, &to->si_uid);
@@ -2882,7 +2883,7 @@ do_send_specific(pid_t tgid, pid_t pid, int sig, struct siginfo *info)
 
 static int do_tkill(pid_t tgid, pid_t pid, int sig)
 {
-	struct siginfo info = {};
+	struct siginfo info;
 
 	info.si_signo = sig;
 	info.si_errno = 0;
@@ -3252,6 +3253,17 @@ SYSCALL_DEFINE0(pause)
 
 #endif
 
+int sigsuspend(sigset_t *set)
+{
+	current->saved_sigmask = current->blocked;
+	set_current_blocked(set);
+
+	current->state = TASK_INTERRUPTIBLE;
+	schedule();
+	set_restore_sigmask();
+	return -ERESTARTNOHAND;
+}
+
 #ifdef __ARCH_WANT_SYS_RT_SIGSUSPEND
 /**
  *  sys_rt_sigsuspend - replace the signal mask for a value with the
@@ -3269,14 +3281,7 @@ SYSCALL_DEFINE2(rt_sigsuspend, sigset_t __user *, unewset, size_t, sigsetsize)
 
 	if (copy_from_user(&newset, unewset, sizeof(newset)))
 		return -EFAULT;
-
-	current->saved_sigmask = current->blocked;
-	set_current_blocked(&newset);
-
-	current->state = TASK_INTERRUPTIBLE;
-	schedule();
-	set_restore_sigmask();
-	return -ERESTARTNOHAND;
+	return sigsuspend(&newset);
 }
 #endif /* __ARCH_WANT_SYS_RT_SIGSUSPEND */
 
