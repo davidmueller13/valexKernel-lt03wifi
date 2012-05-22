@@ -99,10 +99,7 @@ asmlinkage int do_rt_sigreturn(unsigned long __unused)
 		goto badframe;
 
 	sigdelsetmask(&set, ~_BLOCKABLE);
-	spin_lock_irq(&current->sighand->siglock);
-	current->blocked = set;
-	recalc_sigpending();
-	spin_unlock_irq(&current->sighand->siglock);
+	set_current_blocked(&set);
 
 	if (rt_restore_sigcontext(regs, &frame->uc.uc_mcontext, &r0))
 		goto badframe;
@@ -213,9 +210,7 @@ setup_rt_frame(int sig, struct k_sigaction *ka, siginfo_t * info,
 	return 0;
 
  give_sigsegv:
-	if (sig == SIGSEGV)
-		ka->sa.sa_handler = SIG_DFL;
-	force_sig(SIGSEGV, current);
+	force_sigsegv(sig, current);
 	return -EFAULT;
 }
 
@@ -252,7 +247,7 @@ handle_restart(struct pt_regs *regs, struct k_sigaction *ka, int has_handler)
 /*
  * OK, we're invoking a handler
  */
-static int
+static void
 handle_signal(int sig, siginfo_t *info, struct k_sigaction *ka,
 	      struct pt_regs *regs)
 {
@@ -265,17 +260,12 @@ handle_signal(int sig, siginfo_t *info, struct k_sigaction *ka,
 
 	/* set up the stack frame */
 	ret = setup_rt_frame(sig, ka, info, sigmask_to_save(), regs);
+	if (ret)
+		return;
 
-	if (ret == 0) {
-		spin_lock_irq(&current->sighand->siglock);
-		sigorsets(&current->blocked, &current->blocked,
-			  &ka->sa.sa_mask);
-		if (!(ka->sa.sa_flags & SA_NODEFER))
-			sigaddset(&current->blocked, sig);
-		recalc_sigpending();
-		spin_unlock_irq(&current->sighand->siglock);
-	}
-	return ret;
+	block_sigmask(ka, sig);
+	tracehook_signal_handler(sig, info, ka, regs,
+			test_thread_flag(TIF_SINGLESTEP));
 }
 
 /*
@@ -301,18 +291,7 @@ asmlinkage void do_signal(struct pt_regs *regs)
 	signr = get_signal_to_deliver(&info, &ka, regs, NULL);
 	if (signr > 0) {
 		/* Whee!  Actually deliver the signal.  */
-		if (handle_signal(signr, &info, &ka, regs) == 0) {
-			/* a signal was successfully delivered; the saved
-			 * sigmask will have been stored in the signal frame,
-			 * and will be restored by sigreturn, so we can simply
-			 * clear the TIF_RESTORE_SIGMASK flag */
-			if (test_thread_flag(TIF_RESTORE_SIGMASK))
-				clear_thread_flag(TIF_RESTORE_SIGMASK);
-
-			tracehook_signal_handler(signr, &info, &ka, regs,
-				test_thread_flag(TIF_SINGLESTEP));
-		}
-
+		handle_signal(signr, &info, &ka, regs);
 		return;
 	}
 

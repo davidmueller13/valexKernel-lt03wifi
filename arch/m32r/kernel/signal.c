@@ -112,10 +112,7 @@ sys_rt_sigreturn(unsigned long r0, unsigned long r1,
 		goto badframe;
 
 	sigdelsetmask(&set, ~_BLOCKABLE);
-	spin_lock_irq(&current->sighand->siglock);
-	current->blocked = set;
-	recalc_sigpending();
-	spin_unlock_irq(&current->sighand->siglock);
+	set_current_blocked(&set);
 
 	if (restore_sigcontext(regs, &frame->uc.uc_mcontext, &result))
 		goto badframe;
@@ -270,7 +267,7 @@ static int prev_insn(struct pt_regs *regs)
  * OK, we're invoking a handler
  */
 
-static int
+static void
 handle_signal(unsigned long sig, struct k_sigaction *ka, siginfo_t *info,
 	      struct pt_regs *regs)
 {
@@ -298,15 +295,9 @@ handle_signal(unsigned long sig, struct k_sigaction *ka, siginfo_t *info,
 
 	/* Set up the stack frame */
 	if (setup_rt_frame(sig, ka, info, sigmask_to_save(), regs))
-		return -EFAULT;
+		return;
 
-	spin_lock_irq(&current->sighand->siglock);
-	sigorsets(&current->blocked,&current->blocked,&ka->sa.sa_mask);
-	if (!(ka->sa.sa_flags & SA_NODEFER))
-		sigaddset(&current->blocked,sig);
-	recalc_sigpending();
-	spin_unlock_irq(&current->sighand->siglock);
-	return 0;
+	block_sigmask(ka, sig);
 }
 
 /*
@@ -341,8 +332,7 @@ static void do_signal(struct pt_regs *regs)
 		 */
 
 		/* Whee!  Actually deliver the signal.  */
-		if (handle_signal(signr, &ka, &info, regs) == 0)
-			clear_thread_flag(TIF_RESTORE_SIGMASK);
+		handle_signal(signr, &ka, &info, regs);
 
 		return;
 	}
