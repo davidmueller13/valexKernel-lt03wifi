@@ -1673,12 +1673,11 @@ static unsigned long shrink_list(enum lru_list lru, unsigned long nr_to_scan,
 	return shrink_inactive_list(nr_to_scan, mz, sc, priority, lru);
 }
 
-static int vmscan_swappiness(struct mem_cgroup_zone *mz,
-			     struct scan_control *sc)
+static int vmscan_swappiness(struct scan_control *sc)
 {
 	if (global_reclaim(sc))
-		return sc->swappiness;
-	return mem_cgroup_swappiness(mz->mem_cgroup);
+		return vm_swappiness;
+	return mem_cgroup_swappiness(sc->target_mem_cgroup);
 }
 
 /*
@@ -1745,12 +1744,8 @@ static void get_scan_count(struct mem_cgroup_zone *mz, struct scan_control *sc,
 	/*
 	 * This scanning priority is essentially the inverse of IO cost.
 	 */
-	anon_prio = vmscan_swappiness(mz, sc);
-#ifdef CONFIG_ZSWAP
-	file_prio = max_swappiness - vmscan_swappiness(mz, sc);
-#else
-	file_prio = 200 - vmscan_swappiness(mz, sc);
-#endif
+	anon_prio = vmscan_swappiness(sc);
+	file_prio = 200 - vmscan_swappiness(sc);
 
 	/*
 	 * OK, so we have swap space and a fair amount of page cache
@@ -1795,7 +1790,7 @@ out:
 		unsigned long scan;
 
 		scan = zone_nr_lru_pages(mz, lru);
-		if (priority || noswap || !vmscan_swappiness(mz, sc)) {
+		if (priority || noswap || !vmscan_swappiness(sc)) {
 			scan >>= priority;
 			if (!scan && force_scan)
 				scan = SWAP_CLUSTER_MAX;
