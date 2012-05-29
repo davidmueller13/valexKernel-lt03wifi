@@ -3124,8 +3124,7 @@ int hugetlb_reserve_pages(struct inode *inode,
 		region_add(&inode->i_mapping->private_list, from, to);
 	return 0;
 out_err:
-	if (vma)
-		resv_map_put(vma);
+	resv_map_put(vma);
 	return ret;
 }
 
