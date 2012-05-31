@@ -4383,7 +4383,7 @@ void update_group_power(struct sched_domain *sd, int cpu)
 		group = group->next;
 	} while (group != child->groups);
 
-	sdg->sgp->power = power;
+	sdg->sgp->power_orig = sdg->sgp->power = power;
 }
 
 /*
