@@ -532,7 +532,7 @@ out:
 ssize_t compat_rw_copy_check_uvector(int type,
 		const struct compat_iovec __user *uvector, unsigned long nr_segs,
 		unsigned long fast_segs, struct iovec *fast_pointer,
-		struct iovec **ret_pointer, int check_access)
+		struct iovec **ret_pointer)
 {
 	compat_ssize_t tot_len;
 	struct iovec *iov = *ret_pointer = fast_pointer;
@@ -558,10 +558,6 @@ ssize_t compat_rw_copy_check_uvector(int type,
 	}
 	*ret_pointer = iov;
 
-	ret = -EFAULT;
-	if (!access_ok(VERIFY_READ, uvector, nr_segs*sizeof(*uvector)))
-		goto out;
-
 	/*
 	 * Single unix specification:
 	 * We should -EINVAL if an element length is not >= 0 and fitting an
@@ -583,7 +579,7 @@ ssize_t compat_rw_copy_check_uvector(int type,
 		}
 		if (len < 0)	/* size_t not fitting in compat_ssize_t .. */
 			goto out;
-		if (check_access &&
+		if (type >= 0 &&
 		    !access_ok(vrfy_dir(type), compat_ptr(buf), len)) {
 			ret = -EFAULT;
 			goto out;
@@ -783,9 +779,8 @@ asmlinkage long compat_sys_mount(const char __user * dev_name,
 	char *dir_page;
 	int retval;
 
-	kernel_type = copy_mount_string(type);
-	retval = PTR_ERR(kernel_type);
-	if (IS_ERR(kernel_type))
+	retval = copy_mount_string(type, &kernel_type);
+	if (retval < 0)
 		goto out;
 
 	dir_page = getname(dir_name);
@@ -793,9 +788,8 @@ asmlinkage long compat_sys_mount(const char __user * dev_name,
 	if (IS_ERR(dir_page))
 		goto out1;
 
-	kernel_dev = copy_mount_string(dev_name);
-	retval = PTR_ERR(kernel_dev);
-	if (IS_ERR(kernel_dev))
+	retval = copy_mount_string(dev_name, &kernel_dev);
+	if (retval < 0)
 		goto out2;
 
 	retval = copy_mount_options(data, &data_page);
@@ -1095,12 +1089,17 @@ static ssize_t compat_do_readv_writev(int type, struct file *file,
 	if (!file->f_op)
 		goto out;
 
-	ret = compat_rw_copy_check_uvector(type, uvector, nr_segs,
-					       UIO_FASTIOV, iovstack, &iov, 1);
-	if (ret <= 0)
+	ret = -EFAULT;
+	if (!access_ok(VERIFY_READ, uvector, nr_segs*sizeof(*uvector)))
 		goto out;
 
-	tot_len = ret;
+	tot_len = compat_rw_copy_check_uvector(type, uvector, nr_segs,
+					       UIO_FASTIOV, iovstack, &iov);
+	if (tot_len == 0) {
+		ret = 0;
+		goto out;
+	}
+
 	ret = rw_verify_area(type, file, pos, tot_len);
 	if (ret < 0)
 		goto out;
@@ -1161,14 +1160,11 @@ compat_sys_readv(unsigned long fd, const struct compat_iovec __user *vec,
 	struct file *file;
 	int fput_needed;
 	ssize_t ret;
-	loff_t pos;
 
 	file = fget_light(fd, &fput_needed);
 	if (!file)
 		return -EBADF;
-	pos = file->f_pos;
-	ret = compat_readv(file, vec, vlen, &pos);
-	file->f_pos = pos;
+	ret = compat_readv(file, vec, vlen, &file->f_pos);
 	fput_light(file, fput_needed);
 	return ret;
 }
@@ -1230,14 +1226,11 @@ compat_sys_writev(unsigned long fd, const struct compat_iovec __user *vec,
 	struct file *file;
 	int fput_needed;
 	ssize_t ret;
-	loff_t pos;
 
 	file = fget_light(fd, &fput_needed);
 	if (!file)
 		return -EBADF;
-	pos = file->f_pos;
-	ret = compat_writev(file, vec, vlen, &pos);
-	file->f_pos = pos;
+	ret = compat_writev(file, vec, vlen, &file->f_pos);
 	fput_light(file, fput_needed);
 	return ret;
 }
