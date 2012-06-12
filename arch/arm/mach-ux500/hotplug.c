@@ -15,9 +15,16 @@
 #include <asm/cacheflush.h>
 #include <asm/smp_plat.h>
 
-extern volatile int pen_release;
-
 static inline void platform_do_lowpower(unsigned int cpu)
+
+#include <mach/setup.h>
+
+/*
+ * platform-specific code to shutdown a CPU
+ *
+ * Called with IRQs disabled
+ */
+void __ref ux500_cpu_die(unsigned int cpu)
 {
 	flush_cache_all();
 

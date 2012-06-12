@@ -24,7 +24,6 @@
 
 #include "common.h"
 
-extern volatile int pen_release;
 extern void change_power_base(unsigned int cpu, void __iomem *base);
 
 static inline void cpu_enter_lowpower_a9(void)
