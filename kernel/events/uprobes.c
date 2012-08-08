@@ -647,6 +647,7 @@ static int
 install_breakpoint(struct uprobe *uprobe, struct mm_struct *mm,
 			struct vm_area_struct *vma, unsigned long vaddr)
 {
+	bool first_uprobe;
 	int ret;
 
 	/*
@@ -678,7 +679,17 @@ install_breakpoint(struct uprobe *uprobe, struct mm_struct *mm,
 		uprobe->flags |= UPROBE_COPY_INSN;
 	}
 
+	/*
+	 * set MMF_HAS_UPROBES in advance for uprobe_pre_sstep_notifier(),
+	 * the task can hit this breakpoint right after __replace_page().
+	 */
+	first_uprobe = !test_bit(MMF_HAS_UPROBES, &mm->flags);
+	if (first_uprobe)
+		set_bit(MMF_HAS_UPROBES, &mm->flags);
+
 	ret = set_swbp(&uprobe->arch, mm, vaddr);
+	if (ret && first_uprobe)
+		clear_bit(MMF_HAS_UPROBES, &mm->flags);
 
 	return ret;
 }
@@ -1078,6 +1089,11 @@ void uprobe_munmap(struct vm_area_struct *vma, unsigned long start, unsigned lon
 		put_uprobe(uprobe);
 	}
 	mutex_unlock(uprobes_mmap_hash(inode));
+
+	if (!test_bit(MMF_HAS_UPROBES, &vma->vm_mm->flags))
+		return;
+
+	/* TODO: unmapping uprobe(s) will need more work */
 }
 
 /* Slot allocation for XOL */
@@ -1185,6 +1201,12 @@ void uprobe_clear_state(struct mm_struct *mm)
 void uprobe_reset_state(struct mm_struct *mm)
 {
 	mm->uprobes_state.xol_area = NULL;
+}
+
+void uprobe_dup_mmap(struct mm_struct *oldmm, struct mm_struct *newmm)
+{
+	if (test_bit(MMF_HAS_UPROBES, &oldmm->flags))
+		set_bit(MMF_HAS_UPROBES, &newmm->flags);
 }
 
 /*
@@ -1552,7 +1574,7 @@ int uprobe_pre_sstep_notifier(struct pt_regs *regs)
 {
 	struct uprobe_task *utask;
 
-	if (!current->mm)
+	if (!current->mm || !test_bit(MMF_HAS_UPROBES, &current->mm->flags))
 		return 0;
 
 	utask = current->utask;
