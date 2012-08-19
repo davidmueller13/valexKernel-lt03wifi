@@ -688,7 +688,9 @@ install_breakpoint(struct uprobe *uprobe, struct mm_struct *mm,
 		set_bit(MMF_HAS_UPROBES, &mm->flags);
 
 	ret = set_swbp(&uprobe->arch, mm, vaddr);
-	if (ret && first_uprobe)
+	if (!ret)
+		clear_bit(MMF_RECALC_UPROBES, &mm->flags);
+	else if (first_uprobe)
 		clear_bit(MMF_HAS_UPROBES, &mm->flags);
 
 	return ret;
@@ -697,7 +699,12 @@ install_breakpoint(struct uprobe *uprobe, struct mm_struct *mm,
 static void
 remove_breakpoint(struct uprobe *uprobe, struct mm_struct *mm, unsigned long vaddr)
 {
-	set_orig_insn(&uprobe->arch, mm, vaddr, true);
+	/* can happen if uprobe_register() fails */
+	if (!test_bit(MMF_HAS_UPROBES, &mm->flags))
+		return;
+
+	set_bit(MMF_RECALC_UPROBES, &mm->flags);
+	set_orig_insn(&uprobe->arch, mm, vaddr);
 }
 
 /*
@@ -1063,6 +1070,25 @@ int uprobe_mmap(struct vm_area_struct *vma)
 	return ret;
 }
 
+static bool
+vma_has_uprobes(struct vm_area_struct *vma, unsigned long start, unsigned long end)
+{
+	loff_t min, max;
+	struct inode *inode;
+	struct rb_node *n;
+
+	inode = vma->vm_file->f_mapping->host;
+
+	min = vaddr_to_offset(vma, start);
+	max = min + (end - start) - 1;
+
+	spin_lock(&uprobes_treelock);
+	n = find_node_in_range(inode, min, max);
+	spin_unlock(&uprobes_treelock);
+
+	return !!n;
+}
+
 /*
  * Called in context of a munmap of a vma.
  */
@@ -1078,22 +1104,12 @@ void uprobe_munmap(struct vm_area_struct *vma, unsigned long start, unsigned lon
 	if (!atomic_read(&vma->vm_mm->mm_users)) /* called by mmput() ? */
 		return;
 
-	inode = vma->vm_file->f_mapping->host;
-	if (!inode)
+	if (!test_bit(MMF_HAS_UPROBES, &vma->vm_mm->flags) ||
+	     test_bit(MMF_RECALC_UPROBES, &vma->vm_mm->flags))
 		return;
 
-	mutex_lock(uprobes_mmap_hash(inode));
-	build_probe_list(inode, vma, start, end, &tmp_list);
-
-	list_for_each_entry_safe(uprobe, u, &tmp_list, pending_list) {
-		put_uprobe(uprobe);
-	}
-	mutex_unlock(uprobes_mmap_hash(inode));
-
-	if (!test_bit(MMF_HAS_UPROBES, &vma->vm_mm->flags))
-		return;
-
-	/* TODO: unmapping uprobe(s) will need more work */
+	if (vma_has_uprobes(vma, start, end))
+		set_bit(MMF_RECALC_UPROBES, &vma->vm_mm->flags);
 }
 
 /* Slot allocation for XOL */
@@ -1205,8 +1221,13 @@ void uprobe_reset_state(struct mm_struct *mm)
 
 void uprobe_dup_mmap(struct mm_struct *oldmm, struct mm_struct *newmm)
 {
-	if (test_bit(MMF_HAS_UPROBES, &oldmm->flags))
+	newmm->uprobes_state.xol_area = NULL;
+
+	if (test_bit(MMF_HAS_UPROBES, &oldmm->flags)) {
 		set_bit(MMF_HAS_UPROBES, &newmm->flags);
+		/* unconditionally, dup_mmap() skips VM_DONTCOPY vmas */
+		set_bit(MMF_RECALC_UPROBES, &newmm->flags);
+	}
 }
 
 /*
