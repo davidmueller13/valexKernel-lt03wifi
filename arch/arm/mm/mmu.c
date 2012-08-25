@@ -838,7 +838,14 @@ void __init vm_reserve_area_early(unsigned long addr, unsigned long size,
 
 static void __init pmd_empty_section_gap(unsigned long addr)
 {
-	vm_reserve_area_early(addr, SECTION_SIZE, pmd_empty_section_gap);
+	struct vm_struct *vm;
+
+	vm = early_alloc_aligned(sizeof(*vm), __alignof__(*vm));
+	vm->addr = (void *)addr;
+	vm->size = SECTION_SIZE;
+	vm->flags = VM_IOREMAP | VM_ARM_EMPTY_MAPPING;
+	vm->caller = pmd_empty_section_gap;
+	vm_area_add_early(vm);
 }
 
 static void __init fill_pmd_gaps(void)
