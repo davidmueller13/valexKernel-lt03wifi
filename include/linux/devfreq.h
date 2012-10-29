@@ -92,8 +92,9 @@ struct devfreq_dev_profile {
 
 /**
  * struct devfreq_governor - Devfreq policy governor
- * @name		Governor's name
- * @get_target_freq	Returns desired operating frequency for the device.
+ * @node:		list node - contains registered devfreq governors
+ * @name:		Governor's name
+ * @get_target_freq:	Returns desired operating frequency for the device.
  *			Basically, get_target_freq will run
  *			devfreq_dev_profile.get_dev_status() to get the
  *			status of the device (load = busy_time / total_time).
@@ -107,6 +108,8 @@ struct devfreq_dev_profile {
  * Note that the callbacks are called with devfreq->lock locked by devfreq.
  */
 struct devfreq_governor {
+	struct list_head node;
+
 	const char name[DEVFREQ_NAME_LEN];
 	int (*get_target_freq)(struct devfreq *this, unsigned long *freq);
 	int (*event_handler)(struct devfreq *devfreq,
