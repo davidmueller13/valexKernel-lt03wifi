@@ -10,6 +10,7 @@
  */
 
 #include <linux/errno.h>
+#include <linux/module.h>
 #include <linux/devfreq.h>
 #include <linux/math64.h>
 #include <linux/pm_qos.h>
@@ -225,3 +226,4 @@ static void __exit devfreq_simple_ondemand_exit(void)
 	return;
 }
 module_exit(devfreq_simple_ondemand_exit);
+MODULE_LICENSE("GPL");
