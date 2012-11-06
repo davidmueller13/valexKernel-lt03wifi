@@ -105,6 +105,10 @@
 
 #define REV_PL310_R2P0				4
 
+#define L2X0_CTRL_EN			1
+
+#define L2X0_WAY_SIZE_SHIFT		3
+
 #ifndef __ASSEMBLY__
 extern void __init l2x0_init(void __iomem *base, u32 aux_val, u32 aux_mask);
 #if defined(CONFIG_CACHE_L2X0) && defined(CONFIG_OF)
