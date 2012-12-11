@@ -45,7 +45,7 @@
 
 #else
 
-#include <mach/debug-macro.S>
+#include CONFIG_DEBUG_LL_INCLUDE
 
 		.macro	writeb,	ch, rb
 		senduart \ch, \rb
