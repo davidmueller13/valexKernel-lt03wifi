@@ -15,7 +15,6 @@
 #include <linux/jiffies.h>
 #include <linux/smp.h>
 #include <linux/io.h>
-#include <linux/irqchip/arm-gic.h>
 
 #include <asm/cacheflush.h>
 #include <asm/cputype.h>
@@ -47,13 +46,6 @@ void platform_secondary_init(unsigned int cpu)
 {
 	/* Configure edge-triggered PPIs */
 	writel(GIC_PPI_EDGE_MASK, MSM_QGIC_DIST_BASE + GIC_DIST_CONFIG + 4);
-
-	/*
-	 * if any interrupts are already enabled for the primary
-	 * core (e.g. timer irq), then they will not have been enabled
-	 * for us: do so
-	 */
-	gic_secondary_init(0);
 
 	/*
 	 * let the primary processor know we're out of the
