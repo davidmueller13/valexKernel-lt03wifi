@@ -42,7 +42,7 @@
 #include <linux/lockdep.h>
 #include <linux/idr.h>
 
-#include "workqueue_sched.h"
+#include "workqueue_internal.h"
 
 enum {
 	/* global_cwq flags */
