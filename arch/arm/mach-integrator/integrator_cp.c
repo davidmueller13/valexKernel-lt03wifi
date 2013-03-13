@@ -415,6 +415,20 @@ static struct amba_device *amba_devs[] __initdata = {
 	&mmc_device,
 	&aaci_device,
 	&clcd_device,
+
+#define REFCOUNTER (__io_address(INTEGRATOR_HDR_BASE) + 0x28)
+
+static void __init intcp_init_early(void)
+{
+#ifdef CONFIG_PLAT_VERSATILE_SCHED_CLOCK
+	versatile_sched_clock_init(REFCOUNTER, 24000000);
+#endif
+}
+
+#ifdef CONFIG_OF
+static const struct of_device_id fpga_irq_of_match[] __initconst = {
+	{ .compatible = "arm,versatile-fpga-irq", .data = fpga_irq_of_init, },
+	{ /* Sentinel */ }
 };
 
 #define REFCOUNTER (__io_address(INTEGRATOR_HDR_BASE) + 0x28)
@@ -424,6 +438,29 @@ static void __init intcp_init_early(void)
 	clkdev_add_table(cp_lookups, ARRAY_SIZE(cp_lookups));
 
 	integrator_init_early();
+
+	if (!IS_ERR_OR_NULL(parent))
+		integrator_init_sysfs(parent, intcp_sc_id);
+
+	of_platform_populate(root, of_default_bus_match_table,
+			intcp_auxdata_lookup, parent);
+}
+
+static const char * intcp_dt_board_compat[] = {
+	"arm,integrator-cp",
+	NULL,
+};
+
+DT_MACHINE_START(INTEGRATOR_CP_DT, "ARM Integrator/CP (Device Tree)")
+	.reserve	= integrator_reserve,
+	.map_io		= intcp_map_io,
+	.init_early	= intcp_init_early,
+	.init_irq	= intcp_init_irq_of,
+	.handle_irq	= fpga_handle_irq,
+	.init_machine	= intcp_init_of,
+	.restart	= integrator_restart,
+	.dt_compat      = intcp_dt_board_compat,
+MACHINE_END
 
 #ifdef CONFIG_PLAT_VERSATILE_SCHED_CLOCK
 	versatile_sched_clock_init(REFCOUNTER, 24000000);
