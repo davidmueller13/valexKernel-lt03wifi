@@ -77,7 +77,6 @@ ENTRY(stext)
 ENDPROC(stext)
 
 #ifdef CONFIG_SMP
-	__CPUINIT
 ENTRY(secondary_startup)
 	/*
 	 * Common entry point for secondary CPUs.

@@ -14,8 +14,6 @@
 #include <linux/init.h>
 #include <asm/memory.h>
 
-	__CPUINIT
-
 /* Cache invalidation nicked from arch/arm/mach-imx/head-v7.S, thanks!
  *
  * The secondary kernel init calls v7_flush_dcache_all before it enables

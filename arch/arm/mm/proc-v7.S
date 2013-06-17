@@ -280,8 +280,6 @@ ENTRY(cpu_v7_setup_cp15)
 	ret	lr
 ENDPROC(cpu_v7_setup_cp15)
 
-	__CPUINIT
-
 /*
  *     __v7_setup
  *
