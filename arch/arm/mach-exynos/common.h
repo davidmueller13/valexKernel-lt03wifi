@@ -65,6 +65,7 @@ extern bool is_ovlo_state;
 extern unsigned int lpcharge;
 
 extern struct smp_operations exynos_smp_ops;
+extern bool exynos_smp_init(void);
 
 extern void exynos_cpu_die(unsigned int cpu);
 
