@@ -45,6 +45,8 @@ obj-$(CONFIG_EXYNOS4_MCT)	+= mct.o
 
 obj-$(CONFIG_HOTPLUG_CPU)	+= hotplug.o
 
+obj-$(CONFIG_MCPM)		+= mcpm-exynos.o mcpm-exynos-setup.o
+
 obj-$(CONFIG_ARCH_EXYNOS)	+= clock-audss.o
 
 obj-$(CONFIG_EXYNOS_FIQ_DEBUGGER)	+= exynos_fiq_debugger.o
