@@ -37,6 +37,7 @@ ifeq ($(CONFIG_ARCH_ACORN),y)
 OBJS		+= ll_char_wr.o font.o
 endif
 
+<<<<<<< HEAD
 ifeq ($(CONFIG_ARCH_SHARK),y)
 OBJS		+= head-shark.o ofw-shark.o
 endif
@@ -46,6 +47,8 @@ ifeq ($(CONFIG_ARCH_P720T),y)
 OBJS		+= head-sa1100.o
 endif
 
+=======
+>>>>>>> 136dfa5... ARM: delete mach-shark
 ifeq ($(CONFIG_ARCH_SA1100),y)
 OBJS		+= head-sa1100.o
 endif
