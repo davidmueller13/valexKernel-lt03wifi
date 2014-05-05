@@ -61,14 +61,70 @@
 #include <linux/nsproxy.h>
 #include <linux/ptrace.h>
 #include <linux/hugetlb.h>
+#include <linux/bootmem.h>
 
 #include <asm/futex.h>
 
 #include "rtmutex_common.h"
 
-int __read_mostly futex_cmpxchg_enabled;
+/*
+ * Basic futex operation and ordering guarantees:
+ *
+ * The waiter reads the futex value in user space and calls
+ * futex_wait(). This function computes the hash bucket and acquires
+ * the hash bucket lock. After that it reads the futex user space value
+ * again and verifies that the data has not changed. If it has not
+ * changed it enqueues itself into the hash bucket, releases the hash
+ * bucket lock and schedules.
+ *
+ * The waker side modifies the user space value of the futex and calls
+ * futex_wake(). This functions computes the hash bucket and acquires
+ * the hash bucket lock. Then it looks for waiters on that futex in the
+ * hash bucket and wakes them.
+ *
+ * Note that the spin_lock serializes waiters and wakers, so that the
+ * following scenario is avoided:
+ *
+ * CPU 0                               CPU 1
+ * val = *futex;
+ * sys_futex(WAIT, futex, val);
+ *   futex_wait(futex, val);
+ *   uval = *futex;
+ *                                     *futex = newval;
+ *                                     sys_futex(WAKE, futex);
+ *                                       futex_wake(futex);
+ *                                       if (queue_empty())
+ *                                         return;
+ *   if (uval == val)
+ *      lock(hash_bucket(futex));
+ *      queue();
+ *     unlock(hash_bucket(futex));
+ *     schedule();
+ *
+ * This would cause the waiter on CPU 0 to wait forever because it
+ * missed the transition of the user space value from val to newval
+ * and the waker did not find the waiter in the hash bucket queue.
+ * The spinlock serializes that:
+ *
+ * CPU 0                               CPU 1
+ * val = *futex;
+ * sys_futex(WAIT, futex, val);
+ *   futex_wait(futex, val);
+ *   lock(hash_bucket(futex));
+ *   uval = *futex;
+ *                                     *futex = newval;
+ *                                     sys_futex(WAKE, futex);
+ *                                       futex_wake(futex);
+ *                                       lock(hash_bucket(futex));
+ *   if (uval == val)
+ *      queue();
+ *     unlock(hash_bucket(futex));
+ *     schedule();                       if (!queue_empty())
+ *                                         wake_waiters(futex);
+ *                                       unlock(hash_bucket(futex));
+ */
 
-#define FUTEX_HASHBITS (CONFIG_BASE_SMALL ? 4 : 8)
+int __read_mostly futex_cmpxchg_enabled;
 
 /*
  * Futex flags used to encode options to functions and preserve them across
@@ -147,9 +203,11 @@ static const struct futex_q futex_q_init = {
 struct futex_hash_bucket {
 	spinlock_t lock;
 	struct plist_head chain;
-};
+} ____cacheline_aligned_in_smp;
 
-static struct futex_hash_bucket futex_queues[1<<FUTEX_HASHBITS];
+static unsigned long __read_mostly futex_hashsize;
+
+static struct futex_hash_bucket *futex_queues;
 
 /*
  * We hash on the keys returned from get_futex_key (see below).
@@ -159,7 +217,7 @@ static struct futex_hash_bucket *hash_futex(union futex_key *key)
 	u32 hash = jhash2((u32*)&key->both.word,
 			  (sizeof(key->both.word)+sizeof(key->both.ptr))/4,
 			  key->both.offset);
-	return &futex_queues[hash & ((1 << FUTEX_HASHBITS)-1)];
+	return &futex_queues[hash & (futex_hashsize - 1)];
 }
 
 /*
@@ -2869,8 +2927,20 @@ SYSCALL_DEFINE6(futex, u32 __user *, uaddr, int, op, u32, val,
 static int __init futex_init(void)
 {
 	u32 curval;
-	int i;
+	unsigned int futex_shift;
+	unsigned long i;
 
+#if CONFIG_BASE_SMALL
+	futex_hashsize = 16;
+#else
+	futex_hashsize = roundup_pow_of_two(256 * num_possible_cpus());
+#endif
+
+	futex_queues = alloc_large_system_hash("futex", sizeof(*futex_queues),
+					       futex_hashsize, 0,
+					       futex_hashsize < 256 ? HASH_SMALL : 0,
+					       &futex_shift, NULL, futex_hashsize);
+	futex_hashsize = 1UL << futex_shift;
 	/*
 	 * This will fail and we want it. Some arch implementations do
 	 * runtime detection of the futex_atomic_cmpxchg_inatomic()
@@ -2884,7 +2954,7 @@ static int __init futex_init(void)
 	if (cmpxchg_futex_value_locked(&curval, NULL, 0, 0) == -EFAULT)
 		futex_cmpxchg_enabled = 1;
 
-	for (i = 0; i < ARRAY_SIZE(futex_queues); i++) {
+	for (i = 0; i < futex_hashsize; i++) {
 		plist_head_init(&futex_queues[i].chain);
 		spin_lock_init(&futex_queues[i].lock);
 	}
