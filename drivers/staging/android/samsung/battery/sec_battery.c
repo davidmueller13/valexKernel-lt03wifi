@@ -82,6 +82,7 @@ static enum power_supply_property sec_battery_props[] = {
 	POWER_SUPPLY_PROP_VOLTAGE_AVG,
 	POWER_SUPPLY_PROP_CURRENT_NOW,
 	POWER_SUPPLY_PROP_CURRENT_AVG,
+	POWER_SUPPLY_PROP_CURRENT_MAX,
 	POWER_SUPPLY_PROP_CHARGE_NOW,
 	POWER_SUPPLY_PROP_CAPACITY,
 	POWER_SUPPLY_PROP_TEMP,
@@ -1501,6 +1502,20 @@ static void sec_bat_get_battery_info(
 		POWER_SUPPLY_PROP_VOLTAGE_AVG, value);
 	battery->voltage_ocv = value.intval;
 
+	/* All current limits in charger */
+	
+	psy_do_property("sec-charger", get,
+		POWER_SUPPLY_PROP_CURRENT_AVG, value);
+	battery->current_avg = value.intval;
+
+	psy_do_property("sec-charger", get,
+		POWER_SUPPLY_PROP_CURRENT_NOW, value);
+	battery->current_now = value.intval;
+
+	psy_do_property("sec-charger", get,
+		POWER_SUPPLY_PROP_CURRENT_MAX, value);
+	battery->current_max = value.intval;
+
 	value.intval = SEC_BATTEY_CURRENT_MA;
 	psy_do_property("sec-fuelgauge", get,
 		POWER_SUPPLY_PROP_CURRENT_NOW, value);
@@ -2526,33 +2541,37 @@ ssize_t sec_bat_store_attrs(
 			ret = count;
 		}
 		break;
-#if defined(CONFIG_SAMSUNG_BATTERY_ENG_TEST)
-	case BATT_TEST_CHARGE_CURRENT:
-		if (sscanf(buf, "%d\n", &x) == 1) {
-			if (x >= 0 && x <= 2000) {
-				union power_supply_propval value;
-				dev_err(battery->dev,
-					"%s: BATT_TEST_CHARGE_CURRENT(%d)\n", __func__, x);
-				battery->pdata->charging_current[
-					POWER_SUPPLY_TYPE_USB].input_current_limit = x;
-				battery->pdata->charging_current[
-					POWER_SUPPLY_TYPE_USB].fast_charging_current = x;
-				if (x > 500) {
-					battery->pdata->temp_check_type =
-						SEC_BATTERY_TEMP_CHECK_NONE;
-					battery->pdata->charging_total_time =
-						10000 * 60 * 60;
-				}
-				if (battery->cable_type == POWER_SUPPLY_TYPE_USB) {
-					value.intval = x;
-					psy_do_property("sec-charger", set,
-						POWER_SUPPLY_PROP_POWER_NOW, value);
-				}
-			}
+	case BATT_TEMP_TABLE:
+		if (sscanf(buf, "%d %d %d %d %d %d %d %d %d %d %d %d\n",
+			&t[0], &t[1], &t[2], &t[3], &t[4], &t[5], &t[6], &t[7], &t[8], &t[9], &t[10], &t[11]) == 12) {
+			pr_info("%s: (new) %d %d %d %d %d %d %d %d %d %d %d %d\n",
+				__func__, t[0], t[1], t[2], t[3], t[4], t[5], t[6], t[7], t[8], t[9], t[10], t[11]);
+			pr_info("%s: (default) %d %d %d %d %d %d %d %d %d %d %d %d\n",
+				__func__,
+				battery->pdata->temp_high_threshold_event,
+				battery->pdata->temp_high_recovery_event,
+				battery->pdata->temp_low_threshold_event,
+				battery->pdata->temp_low_recovery_event,
+				battery->pdata->temp_high_threshold_normal,
+				battery->pdata->temp_high_recovery_normal,
+				battery->pdata->temp_low_threshold_normal,
+				battery->pdata->temp_low_recovery_normal,
+				battery->pdata->temp_high_threshold_lpm,
+				battery->pdata->temp_high_recovery_lpm,
+				battery->pdata->temp_low_threshold_lpm,
+				battery->pdata->temp_low_recovery_lpm);
+			update_external_temp_table(battery, t);
 			ret = count;
 		}
 		break;
-#endif
+
+	case BATT_HIGH_CURRENT_USB:
+		if (sscanf(buf, "%d\n", &x) == 1) {
+			battery->pdata->is_hc_usb = x ? true : false;
+			pr_info("%s: is_hc_usb (%d)\n", __func__, battery->pdata->is_hc_usb);
+			ret = count;
+		}
+		break;
 	default:
 		ret = -EINVAL;
 	}
@@ -2788,6 +2807,9 @@ static int sec_bat_get_property(struct power_supply *psy,
 		break;
 	case POWER_SUPPLY_PROP_CURRENT_AVG:
 		val->intval = battery->current_avg;
+		break;
+	case POWER_SUPPLY_PROP_CURRENT_MAX:
+		val->intval = battery->current_max;
 		break;
 	/* charging mode (differ from power supply) */
 	case POWER_SUPPLY_PROP_CHARGE_NOW:
@@ -3152,6 +3174,9 @@ static int __devinit sec_battery_probe(struct platform_device *pdev)
 
 	dev_dbg(battery->dev,
 		"%s: SEC Battery Driver Loaded\n", __func__);
+
+	charger_control_init(battery);
+
 	return 0;
 
 err_req_irq:
