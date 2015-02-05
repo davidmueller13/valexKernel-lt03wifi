@@ -2572,6 +2572,7 @@ static bool sleeping_prematurely(pg_data_t *pgdat, int order, long remaining,
 static unsigned long balance_pgdat(pg_data_t *pgdat, int order,
 							int *classzone_idx)
 {
+	int all_zones_ok;
 	struct zone *unbalanced_zone;
 	unsigned long balanced;
 	int priority;
