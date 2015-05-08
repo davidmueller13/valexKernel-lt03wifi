@@ -17,9 +17,9 @@
 #include <linux/init.h>
 #include <linux/smp.h>
 #include <linux/io.h>
+#include <linux/irqchip/arm-gic.h>
 
 #include <asm/smp_scu.h>
-#include <asm/hardware/gic.h>
 
 #include "core.h"
 
@@ -32,7 +32,7 @@ void platform_secondary_init(unsigned int cpu)
 
 int boot_secondary(unsigned int cpu, struct task_struct *idle)
 {
-	gic_raise_softirq(cpumask_of(cpu), 0);
+	arch_send_wakeup_ipi_mask(cpumask_of(cpu));
 	return 0;
 }
 
@@ -57,8 +57,6 @@ void __init smp_init_cpus(void)
 
 	for (i = 0; i < ncores; i++)
 		set_cpu_possible(i, true);
-
-	set_smp_cross_call(gic_raise_softirq);
 }
 
 void __init platform_smp_prepare_cpus(unsigned int max_cpus)

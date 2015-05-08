@@ -28,9 +28,9 @@
 #include <linux/mm.h>
 #include <linux/string.h>
 #include <linux/spinlock.h>
+#include <linux/irqchip/arm-gic.h>
 
 #include <asm/suspend.h>
-#include <asm/hardware/gic.h>
 #include <asm/bL_switcher.h>
 #include <asm/bL_entry.h>
 #include <mach/sec_debug.h>

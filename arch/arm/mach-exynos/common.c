@@ -19,12 +19,12 @@
 #include <linux/serial_core.h>
 #include <linux/of.h>
 #include <linux/of_irq.h>
+#include <linux/irqchip.h>
 #include <linux/dma-mapping.h>
 
 #include <asm/proc-fns.h>
 #include <asm/exception.h>
 #include <asm/hardware/cache-l2x0.h>
-#include <asm/hardware/gic.h>
 #include <asm/mach/map.h>
 #include <asm/mach/irq.h>
 #include <asm/cacheflush.h>
@@ -875,8 +875,10 @@ void __init exynos4_init_irq(void)
 	if (!of_have_populated_dt())
 		gic_init_bases(0, IRQ_PPI(0), S5P_VA_GIC_DIST, S5P_VA_GIC_CPU, gic_bank_offset, NULL);
 #ifdef CONFIG_OF
-	else
+	else {
+		irqchip_init();
 		of_irq_init(exynos4_dt_irq_match);
+	}
 #endif
 	gic_arch_extn.irq_set_wake = s3c_irq_wake;
 
@@ -906,6 +908,7 @@ void __init exynos5_init_irq(void)
 	int irq;
 
 #ifdef CONFIG_OF
+	irqchip_init()
 	of_irq_init(exynos4_dt_irq_match);
 #else
 	gic_init(0, IRQ_PPI(0), S5P_VA_GIC_DIST, S5P_VA_GIC_CPU);
