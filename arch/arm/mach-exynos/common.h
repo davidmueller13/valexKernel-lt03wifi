@@ -22,6 +22,8 @@ void exynos5_init_irq(void);
 void exynos4_restart(char mode, const char *cmd);
 void exynos5_restart(char mode, const char *cmd);
 
+extern void exynos_smc(u32 cmd, u32 arg1, u32 arg2, u32 arg3);
+
 #ifdef CONFIG_ARCH_EXYNOS4
 void exynos4_register_clocks(void);
 void exynos4_setup_clocks(void);
