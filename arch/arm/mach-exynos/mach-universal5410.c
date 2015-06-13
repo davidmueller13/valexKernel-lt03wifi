@@ -360,6 +360,7 @@ static void __init universal5410_machine_init(void)
 
 MACHINE_START(UNIVERSAL5410, "UNIVERSAL5410")
 	.atag_offset	= 0x100,
+	.smp		= smp_ops(exynos_smp_ops),
 	.init_early	= universal5410_init_early,
 	.init_irq	= exynos5_init_irq,
 	.map_io		= universal5410_map_io,
