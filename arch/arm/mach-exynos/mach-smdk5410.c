@@ -332,6 +332,7 @@ static void __init smdk5410_machine_init(void)
 
 MACHINE_START(SMDK5410, "SMDK5410")
 	.atag_offset	= 0x100,
+	.smp		= smp_ops(exynos_smp_ops),
 	.init_early	= smdk5410_init_early,
 	.init_irq	= exynos5_init_irq,
 	.map_io		= smdk5410_map_io,

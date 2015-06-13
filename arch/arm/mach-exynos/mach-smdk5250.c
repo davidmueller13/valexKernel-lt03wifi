@@ -2069,6 +2069,7 @@ static void __init smdk5250_machine_init(void)
 
 MACHINE_START(SMDK5250, "SMDK5250")
 	.atag_offset	= 0x100,
+	.smp		= smp_ops(exynos_smp_ops),
 	.init_early	= smdk5250_init_early,
 	.init_irq	= exynos5_init_irq,
 	.map_io		= smdk5250_map_io,
