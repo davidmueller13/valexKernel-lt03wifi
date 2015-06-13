@@ -301,6 +301,7 @@ static void __init smdk5420_machine_init(void)
 
 MACHINE_START(SMDK5420, "SMDK5420")
 	.atag_offset	= 0x100,
+	.smp		= smp_ops(exynos_smp_ops),
 	.init_early	= smdk5420_init_early,
 	.init_irq	= exynos5_init_irq,
 	.map_io		= smdk5420_map_io,

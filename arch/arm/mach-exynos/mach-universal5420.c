@@ -374,6 +374,7 @@ static void __init universal5420_machine_init(void)
 
 MACHINE_START(UNIVERSAL5420, "UNIVERSAL5420")
 	.atag_offset	= 0x100,
+	.smp		= smp_ops(exynos_smp_ops),
 	.init_early	= universal5420_init_early,
 	.init_irq	= exynos5_init_irq,
 	.map_io		= universal5420_map_io,

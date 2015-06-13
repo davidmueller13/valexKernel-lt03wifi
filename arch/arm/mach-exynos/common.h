@@ -14,6 +14,7 @@
 
 extern struct sys_timer exynos4_timer;
 
+struct map_desc;
 void exynos_init_io(struct map_desc *mach_desc, int size);
 void exynos_register_audss_clocks(void);
 void exynos4_init_irq(void);
@@ -62,4 +63,9 @@ extern bool is_cable_attached;
 extern bool is_wpc_cable_attached;
 extern bool is_ovlo_state;
 extern unsigned int lpcharge;
+
+extern struct smp_operations exynos_smp_ops;
+
+extern void exynos_cpu_die(unsigned int cpu);
+
 #endif /* __ARCH_ARM_MACH_EXYNOS_COMMON_H */
