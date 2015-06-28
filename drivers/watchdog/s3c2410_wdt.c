@@ -211,7 +211,7 @@ static int s3c2410wdt_set_heartbeat(struct watchdog_device *wdd, unsigned timeou
 	writel(count, S3C2410_WTDAT);
 	writel(wtcon, S3C2410_WTCON);
 
-	wdd->timeout = (count * divisor) / freq;
+	wdd->timeout = timeout;
 
 	return 0;
 }
