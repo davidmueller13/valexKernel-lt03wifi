@@ -707,7 +707,6 @@ static int __devinit pcipcwd_card_init(struct pci_dev *pdev,
 		goto err_out_disable_device;
 	}
 
-	spin_lock_init(&pcipcwd_private.io_lock);
 	pcipcwd_private.pdev = pdev;
 	pcipcwd_private.io_addr = pci_resource_start(pdev, 0);
 
@@ -815,7 +814,22 @@ static struct pci_driver pcipcwd_driver = {
 	.remove		= __devexit_p(pcipcwd_card_exit),
 };
 
-module_pci_driver(pcipcwd_driver);
+static int __init pcipcwd_init_module(void)
+{
+	spin_lock_init(&pcipcwd_private.io_lock);
+
+	return pci_register_driver(&pcipcwd_driver);
+}
+
+static void __exit pcipcwd_cleanup_module(void)
+{
+	pci_unregister_driver(&pcipcwd_driver);
+
+	pr_info("Watchdog Module Unloaded\n");
+}
+
+module_init(pcipcwd_init_module);
+module_exit(pcipcwd_cleanup_module);
 
 MODULE_AUTHOR("Wim Van Sebroeck <wim@iguana.be>");
 MODULE_DESCRIPTION("Berkshire PCI-PC Watchdog driver");
