@@ -21,8 +21,6 @@
 #include <asm/memory.h>
 #include <asm/procinfo.h>
 #include <asm/hardware/cache-l2x0.h>
-#include <asm/bL_entry.h>
-#include <asm/bL_switcher.h>
 #include <linux/kbuild.h>
 
 /*
