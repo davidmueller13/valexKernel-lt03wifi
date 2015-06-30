@@ -447,13 +447,6 @@ config EXYNOS54XX_DEBUG
 	help
 	  Enable preserve debug logic state.
 
-config EXYNOS5_DYNAMIC_CPU_HOTPLUG
-	bool "Dynamic CPU Hotplug support"
-	depends on (SOC_EXYNOS5410 || SOC_EXYNOS5420)
-	default y
-	help
-	  Enable Dynamic CPU Hotplug
-
 config EXYNOS5_MAX_CPU_HOTPLUG
 	bool "Max Perf CPU hotplug support"
 	depends on (ARM_EXYNOS_IKS_CLUSTER && EXYNOS5_DYNAMIC_DUAL_HOTPLUG)
