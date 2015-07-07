@@ -125,12 +125,8 @@ ORIG_CFLAGS := $(KBUILD_CFLAGS)
 KBUILD_CFLAGS = $(subst -pg, , $(ORIG_CFLAGS))
 endif
 
-<<<<<<< HEAD
-ccflags-y := -fpic -fno-builtin -I$(obj)
-=======
 ccflags-y := -fpic -mno-single-pic-base -fno-builtin -I$(obj)
 asflags-y := -Wa,-march=armv7-a
->>>>>>> 2ce493e... ARM: 7666/1: decompressor: add -mno-single-pic-base for building the decompressor
 
 # Supply kernel BSS size to the decompressor via a linker symbol.
 KBSS_SZ = $(shell $(CROSS_COMPILE)size $(obj)/../../../../vmlinux | \
