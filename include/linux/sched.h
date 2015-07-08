@@ -1280,6 +1280,15 @@ struct sched_rt_entity {
  */
 #define RR_TIMESLICE		(100 * HZ / 1000)
 
+#ifdef CONFIG_SCHEDSTATS
+struct sched_stats_dl {
+	u64			last_dmiss;
+	u64			last_rorun;
+	u64			dmiss_max;
+	u64			rorun_max;
+};
+#endif
+
 struct sched_dl_entity {
 	struct rb_node	rb_node;
 	int nr_cpus_allowed;
@@ -1320,6 +1329,10 @@ struct sched_dl_entity {
 	 * own bandwidth to be enforced, thus we need one timer per task.
 	 */
 	struct hrtimer dl_timer;
+
+#ifdef CONFIG_SCHEDSTATS
+	struct sched_stats_dl stats;
+#endif
 };
 
 struct rcu_node;
