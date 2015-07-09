@@ -129,7 +129,7 @@ static struct clocksource msm_clocksource = {
 };
 
 #ifdef CONFIG_LOCAL_TIMERS
-static int __cpuinit msm_local_timer_setup(struct clock_event_device *evt)
+static int msm_local_timer_setup(struct clock_event_device *evt)
 {
 	/* Use existing clock_event for cpu 0 */
 	if (!smp_processor_id())

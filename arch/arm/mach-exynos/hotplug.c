@@ -170,7 +170,7 @@ static inline void platform_do_lowpower(unsigned int cpu, int *spurious)
  *
  * Called with IRQs disabled
  */
-void __cpuinit exynos_cpu_die(unsigned int cpu)
+void exynos_cpu_die(unsigned int cpu)
 {
 	int spurious = 0;
 

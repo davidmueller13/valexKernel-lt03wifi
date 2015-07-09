@@ -67,7 +67,7 @@ static void __iomem *scu_base_addr(void)
 
 static DEFINE_SPINLOCK(boot_lock);
 
-static void __cpuinit exynos_secondary_init(unsigned int cpu)
+static void exynos_secondary_init(unsigned int cpu)
 {
 	/*
 	 * if any interrupts are already enabled for the primary
@@ -174,7 +174,7 @@ static int exynos_power_up_cpu(unsigned int cpu)
 	return 0;
 }
 
-static int __cpuinit exynos_boot_secondary(unsigned int cpu, struct task_struct *idle)
+static int exynos_boot_secondary(unsigned int cpu, struct task_struct *idle)
 {
 	unsigned long timeout;
 	int ret;

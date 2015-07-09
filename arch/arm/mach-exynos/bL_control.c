@@ -456,7 +456,7 @@ static struct syscore_ops exynos_bL_syscore_ops = {
 	.resume		= bL_resume,
 };
 
-static int __cpuinit bL_hotplug_cpu_callback(struct notifier_block *nfb,
+static int bL_hotplug_cpu_callback(struct notifier_block *nfb,
 					unsigned long action, void *hcpu)
 {
 	unsigned int cpu = (unsigned long)hcpu;
@@ -991,7 +991,7 @@ static struct syscore_ops exynos_bL_syscore_ops = {
 	.resume		= bL_resume,
 };
 
-static int __cpuinit bL_hotplug_cpu_callback(struct notifier_block *nfb,
+static int bL_hotplug_cpu_callback(struct notifier_block *nfb,
 					unsigned long action, void *hcpu)
 {
 	unsigned int cluster = (read_mpidr() >> 8) & 0xf;

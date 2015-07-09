@@ -1031,7 +1031,7 @@ static struct notifier_block exynos_qos_notifier = {
 	.notifier_call = exynos_qos_handler,
 };
 
-static int __cpuinit exynos_hotplug_cpu_handler(struct notifier_block *nfb,
+static int exynos_hotplug_cpu_handler(struct notifier_block *nfb,
 					unsigned long action, void *hcpu)
 {
 	unsigned int cpu;

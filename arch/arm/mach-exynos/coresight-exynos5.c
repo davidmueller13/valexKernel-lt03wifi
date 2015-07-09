@@ -283,7 +283,7 @@ static int cs_cpu_pm_notifier(struct notifier_block *self,
 	return NOTIFY_OK;
 }
 
-static int __cpuinit cs_cpu_notifier(struct notifier_block *nfb,
+static int cs_cpu_notifier(struct notifier_block *nfb,
 				     unsigned long action, void *hcpu)
 {
 	int cpu = (unsigned long)hcpu;
