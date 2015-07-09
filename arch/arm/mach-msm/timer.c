@@ -161,7 +161,7 @@ static void msm_local_timer_stop(struct clock_event_device *evt)
 	disable_percpu_irq(evt->irq);
 }
 
-static struct local_timer_ops msm_local_timer_ops __cpuinitdata = {
+static struct local_timer_ops msm_local_timer_ops = {
 	.setup	= msm_local_timer_setup,
 	.stop	= msm_local_timer_stop,
 };

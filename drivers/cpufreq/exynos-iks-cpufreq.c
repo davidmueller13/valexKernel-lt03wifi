@@ -1111,7 +1111,7 @@ static int exynos_hotplug_cpu_handler(struct notifier_block *nfb,
 	return NOTIFY_OK;
 }
 
-static struct notifier_block __cpuinitdata exynos_hotplug_cpu_notifier = {
+static struct notifier_block exynos_hotplug_cpu_notifier = {
 	.notifier_call = exynos_hotplug_cpu_handler,
 };
 

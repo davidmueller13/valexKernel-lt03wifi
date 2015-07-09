@@ -529,7 +529,7 @@ static int bL_hotplug_cpu_callback(struct notifier_block *nfb,
 	return NOTIFY_OK;
 }
 
-static struct notifier_block __cpuinitdata bL_hotplug_cpu_notifier = {
+static struct notifier_block bL_hotplug_cpu_notifier = {
 	.notifier_call = bL_hotplug_cpu_callback,
 };
 
@@ -1011,7 +1011,7 @@ static int bL_hotplug_cpu_callback(struct notifier_block *nfb,
 	return NOTIFY_OK;
 }
 
-static struct notifier_block __cpuinitdata bL_hotplug_cpu_notifier = {
+static struct notifier_block bL_hotplug_cpu_notifier = {
 	.notifier_call = bL_hotplug_cpu_callback,
 };
 

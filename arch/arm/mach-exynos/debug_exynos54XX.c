@@ -481,11 +481,11 @@ static int armdebug_cpu_notifier(struct notifier_block *nfb,
 	return NOTIFY_OK;
 }
 
-static struct notifier_block __cpuinitdata armdebug_cpu_pm_notifier_block = {
+static struct notifier_block armdebug_cpu_pm_notifier_block = {
 	.notifier_call = armdebug_cpu_pm_notifier,
 };
 
-static struct notifier_block __cpuinitdata armdebug_cpu_notifier_block = {
+static struct notifier_block armdebug_cpu_notifier_block = {
 	.notifier_call = armdebug_cpu_notifier,
 };
 

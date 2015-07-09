@@ -305,11 +305,11 @@ static struct syscore_ops cs_syscore_ops = {
 	.resume = cs_resume,
 };
 
-static struct notifier_block __cpuinitdata cs_cpu_pm_notifier_block = {
+static struct notifier_block cs_cpu_pm_notifier_block = {
 	.notifier_call = cs_cpu_pm_notifier,
 };
 
-static struct notifier_block __cpuinitdata cs_cpu_notifier_block = {
+static struct notifier_block cs_cpu_notifier_block = {
 	.notifier_call = cs_cpu_notifier,
 };
 
