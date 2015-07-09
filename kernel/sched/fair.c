@@ -5119,7 +5119,7 @@ static void nohz_idle_balance(struct rq *this_rq, enum cpu_idle_type idle)
 
 		raw_spin_lock_irq(&rq->lock);
 		update_rq_clock(rq);
-		update_cpu_load(rq);
+		update_idle_cpu_load(rq);
 		raw_spin_unlock_irq(&rq->lock);
 
 		rebalance_domains(rq, CPU_IDLE);

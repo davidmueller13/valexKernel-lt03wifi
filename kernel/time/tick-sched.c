@@ -407,8 +407,6 @@ static void tick_nohz_stop_sched_tick(struct tick_sched *ts,
 out:
 	ts->next_jiffies = next_jiffies;
 	ts->last_jiffies = last_jiffies;
-
-	return ret;
 }
 
 static bool can_stop_idle_tick(int cpu, struct tick_sched *ts)
