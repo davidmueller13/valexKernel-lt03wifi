@@ -1,7 +1,7 @@
 VERSION = 3
 PATCHLEVEL = 4
 SUBLEVEL = 106
-EXTRAVERSION = M9
+EXTRAVERSION = -valex-experimental-gic
 NAME = Saber-toothed Squirrel
 
 # *DOCUMENTATION*
