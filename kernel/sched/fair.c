@@ -5106,6 +5106,20 @@ out:
 	return ld_moved;
 }
 
+/* Returns the max newidle lb cost out of all of this_cpu's sched domains */
+inline u64 get_max_newidle_lb_cost(int this_cpu)
+{
+	struct sched_domain *sd;
+	u64 max = 0;
+
+	for_each_domain(this_cpu, sd) {
+		if (sd->max_newidle_lb_cost > max)
+			max = sd->max_newidle_lb_cost;
+	}
+
+	return max;
+}
+
 /*
  * idle_balance is called by schedule() if this_cpu is about to become
  * idle. Attempts to pull tasks from other CPUs.
@@ -5115,12 +5129,12 @@ void idle_balance(int this_cpu, struct rq *this_rq)
 	struct sched_domain *sd;
 	int pulled_task = 0;
 	unsigned long next_balance = jiffies + HZ;
-	u64 curr_cost = 0;
+	u64 curr_cost = 0, max_newidle_lb_cost = 0;
 
 	this_rq->idle_stamp = rq_clock(this_rq);
 
-	if (this_rq->avg_idle < sysctl_sched_migration_cost)
-	if (this_rq->avg_idle < this_rq->max_idle_balance_cost)
+	if (this_rq->avg_idle < sysctl_sched_migration_cost
+				+ this_rq->max_idle_balance_cost)
 		return;
 
 	update_rq_runnable_avg(this_rq, 1);
@@ -5135,12 +5149,20 @@ void idle_balance(int this_cpu, struct rq *this_rq)
 	for_each_domain(this_cpu, sd) {
 		unsigned long interval;
 		int balance = 1;
-		u64 t0, domain_cost, max = 5*sysctl_sched_migration_cost;
+		u64 t0, domain_cost;
+
+		/* Periodically decay sd's max_newidle_lb_cost */
+		if (time_after(jiffies, sd->next_decay_max_lb_cost)) {
+			sd->max_newidle_lb_cost =
+				(sd->max_newidle_lb_cost * 199) / 200;
+			sd->next_decay_max_lb_cost = jiffies + HZ;
+		}
 
 		if (!(sd->flags & SD_LOAD_BALANCE))
 			continue;
 
-		if (this_rq->avg_idle < curr_cost + sd->max_newidle_lb_cost)
+		if (this_rq->avg_idle < curr_cost + sd->max_newidle_lb_cost
+					+ sysctl_sched_migration_cost)
 			break;
 
 		if (sd->flags & SD_BALANCE_NEWIDLE) {
@@ -5151,8 +5173,6 @@ void idle_balance(int this_cpu, struct rq *this_rq)
 						   sd, CPU_NEWLY_IDLE, &balance);
 
 			domain_cost = sched_clock_cpu(smp_processor_id()) - t0;
-			if (domain_cost > max)
-				domain_cost = max;
 
 			if (domain_cost > sd->max_newidle_lb_cost)
 				sd->max_newidle_lb_cost = domain_cost;
@@ -5168,6 +5188,7 @@ void idle_balance(int this_cpu, struct rq *this_rq)
 			break;
 		}
 	}
+	max_newidle_lb_cost = get_max_newidle_lb_cost(this_cpu);
 	rcu_read_unlock();
 
 	raw_spin_lock(&this_rq->lock);
@@ -5180,8 +5201,7 @@ void idle_balance(int this_cpu, struct rq *this_rq)
 		this_rq->next_balance = next_balance;
 	}
 
-	if (curr_cost > this_rq->max_idle_balance_cost)
-		this_rq->max_idle_balance_cost = curr_cost;
+	this_rq->max_idle_balance_cost = max_newidle_lb_cost;
 }
 
 /*
@@ -5417,6 +5437,12 @@ static void rebalance_domains(struct rq *rq, enum cpu_idle_type idle)
 
 	rcu_read_lock();
 	for_each_domain(cpu, sd) {
+		if (time_after(jiffies, sd->next_decay_max_lb_cost)) {
+			sd->max_newidle_lb_cost =
+				(sd->max_newidle_lb_cost * 199) / 200;
+			sd->next_decay_max_lb_cost = jiffies + HZ;
+		}
+
 		if (!(sd->flags & SD_LOAD_BALANCE))
 			continue;
 
