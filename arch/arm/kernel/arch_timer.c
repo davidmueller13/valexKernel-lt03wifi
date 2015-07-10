@@ -158,8 +158,6 @@ static int arch_timer_setup(struct clock_event_device *clk)
 			enable_percpu_irq(arch_timer_ppi[PHYS_NONSECURE_PPI], 0);
 	}
 
-	arch_counter_set_user_access();
-
 	return 0;
 }
 
