@@ -225,12 +225,6 @@ static int bL_switch_to(unsigned int new_cluster_id)
 	/* redirect GIC's SGIs to our counterpart */
 	gic_migrate_target(cpuid + ib_cluster*4);
 
-	/*
-	 * Raise a SGI on the inbound CPU to make sure it doesn't stall
-	 * in a possible WFI, such as the one in bL_do_switch().
-	 */
-	arm_send_ping_ipi(smp_processor_id());
-
 	spin_unlock(&switch_gic_lock);
 
 	ret = cpu_pm_enter();
