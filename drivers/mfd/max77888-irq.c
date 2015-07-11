@@ -29,6 +29,9 @@
 #include <linux/mfd/max77803-private.h>
 #include <plat/gpio-cfg.h>
 
+/* WA for V1 MUIC RESET */
+struct delayed_work muic_reset_dwork;
+
 static const u8 max77803_mask_reg[] = {
 	[LED_INT] = MAX77803_LED_REG_FLASH_INT_MASK,
 	[TOPSYS_INT] = MAX77803_PMIC_REG_TOPSYS_INT_MASK,
@@ -168,6 +171,19 @@ static struct irq_chip max77803_irq_chip = {
 	.irq_unmask		= max77803_irq_unmask,
 };
 
+/* WA for V1 MUIC RESET */
+/* IRQ THREAD WILL RUN */
+static irqreturn_t muic_reset_irq_thread(int irq, void *data)
+{
+	pr_info("MUIC chip was RESET, I will unmask the REG\n");
+
+	cancel_delayed_work_sync(&muic_reset_dwork);
+	schedule_delayed_work(&muic_reset_dwork, HZ);	/* 1s */
+
+	return IRQ_HANDLED;
+}
+/* WA for V1 MUIC RESET */
+
 static irqreturn_t max77803_irq_thread(int irq, void *data)
 {
 	struct max77803_dev *max77803 = data;
@@ -178,6 +194,11 @@ static irqreturn_t max77803_irq_thread(int irq, void *data)
 	int i;
 	pr_debug("%s: irq gpio pre-state(0x%02x)\n", __func__,
 				gpio_get_value(max77803->irq_gpio));
+/* to know the WA's effect */
+	// [[  workaround for MUIC reset
+	cancel_delayed_work_sync(&muic_reset_dwork);
+	schedule_delayed_work(&muic_reset_dwork, 0);
+	// workaround for MUIC reset ]]
 clear_retry:
 	ret = max77803_read_reg(max77803->i2c,
 					MAX77803_PMIC_REG_INTSRC, &irq_src);
@@ -226,6 +247,13 @@ clear_retry:
 	}
 
 	if (irq_src & MAX77803_IRQSRC_MUIC) {
+#ifdef CONFIG_FAST_BOOT
+		if (fake_shut_down) {
+			pr_info("%s An irq is occured during fake shut down\n", __func__);
+			max77803->is_irq_in_fsd = true;
+			return IRQ_HANDLED;
+		}
+#endif
 		/* MUIC INT1 ~ INT3 */
 		max77803_bulk_read(max77803->muic, MAX77803_MUIC_REG_INT1,
 				MAX77803_NUM_IRQ_MUIC_REGS,
@@ -247,7 +275,7 @@ clear_retry:
 		pr_warn("%s: irq_gpio is not High!\n", __func__);
 		goto clear_retry;
 	}
-	
+
 	/* Apply masking */
 	for (i = 0; i < MAX77803_IRQ_GROUP_NR; i++) {
 		if (i >= MUIC_INT1 && i <= MUIC_INT3)
@@ -282,6 +310,9 @@ int max77803_irq_init(struct max77803_dev *max77803)
 	int cur_irq;
 	int ret;
 	u8 i2c_data;
+	/* WA for V1 MUIC RESET */
+	int mr_irq = -1;
+	/* WA for V1 MUIC RESET */
 
 	if (!max77803->irq_gpio) {
 		dev_warn(max77803->dev, "No interrupt specified.\n");
@@ -367,6 +398,31 @@ int max77803_irq_init(struct max77803_dev *max77803)
 			max77803->irq, ret);
 		return ret;
 	}
+
+	/* IRQ THREAD WILL RUN */
+	/* WA for V1 MUIC RESET */
+	INIT_DELAYED_WORK(&muic_reset_dwork, max77888_muic_reg_restore);
+
+	if (max77803->muic_reset_irq == -1) {
+		pr_info("%s : muic reset pin is NOT allocated\n", __func__);
+	} else {
+		s3c_gpio_setpull(max77803->muic_reset_irq, S3C_GPIO_PULL_NONE);
+		mr_irq = gpio_to_irq(max77803->muic_reset_irq);
+		if (mr_irq < 0) {
+			dev_err(max77803->dev, "Failed to request gpio to IRQ %d\n",
+				mr_irq);
+			return mr_irq;
+		}
+		ret = request_threaded_irq(mr_irq, NULL, muic_reset_irq_thread,
+					   IRQF_TRIGGER_FALLING | IRQF_ONESHOT,
+					   "max77803-irq", max77803);
+		if (ret) {
+			dev_err(max77803->dev, "Failed to request reset IRQ %d: %d\n",
+				mr_irq, ret);
+			return ret;
+		}
+	}
+	/* WA for V1 MUIC RESET */
 
 	return 0;
 }

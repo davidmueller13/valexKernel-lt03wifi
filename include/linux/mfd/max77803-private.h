@@ -421,11 +421,11 @@ extern int max77803_muic_host_notify_cb(int enable);
 extern bool max77803_get_current_acc(void);
 #endif
 /* WA for MUIC RESET */
-extern u8 max77803_restore_last_snapshot(u8 reg);
-extern void max77803_muic_reg_restore(struct work_struct *work);
+extern u8 max77888_restore_last_snapshot(u8 reg);
+extern void max77888_muic_reg_restore(struct work_struct *work);
 /* WA for MUIC RESET */
 
-#if defined(CONFIG_MFD_MAX77803)
+#if defined(CONFIG_MFD_MAX77803) || defined(CONFIG_MFD_MAX77888)
 enum cable_type_muic {
 	CABLE_TYPE_NONE_MUIC = 0,
 	CABLE_TYPE_USB_MUIC,
@@ -481,6 +481,6 @@ enum {
 	ADCMODE_ONESHOT			= 0x02,
 	ADCMODE_2S_PULSE		= 0x03
 };
-#endif /* CONFIG_MFD_MAX77803 */
+#endif /* CONFIG_MFD_MAX77803 AND 77888 */
 
 #endif /*  __LINUX_MFD_MAX77803_PRIV_H */
