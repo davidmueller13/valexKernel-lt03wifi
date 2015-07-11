@@ -137,13 +137,12 @@ static void led_set(struct max77803_led_data *led_data)
 	u8 shift = led_current_shift[id];
 	int value;
 
-#if defined(CONFIG_FEAT_LED_MAX77888)
-	/* It is for Flash Control by UART, Max77888 have internal FET structure limitation */
+
+	/* It is for Flash Control by UART, Max77803 have internal FET structure limitation */
 	/* change MUIC Control3 to 'JIG pin Hi-Impedance' */
 	ret = max77803_muic_set_jigset(0x03);
 	if (unlikely(ret))
 		pr_err("[LED] %s : MUIC 0x0E write failed 0x03 \n", __func__);
-#endif
 
 	if (led_data->test_brightness == LED_OFF) {
 		value = max77803_led_get_en_value(led_data, 0);
@@ -176,23 +175,22 @@ static void led_set(struct max77803_led_data *led_data)
 	if (unlikely(ret))
 		goto error_set_bits;
 	}
-#if defined(CONFIG_FEAT_LED_MAX77888)
+
 	/* change MUIC Control3 to 'Auto Detection' */
 	ret = max77803_muic_set_jigset(0x00);
 	if (unlikely(ret))
 		pr_err("[LED] %s : MUIC 0x0E write failed 0x00 \n", __func__);
-#endif
+
 	return;
 
 error_set_bits:
 	pr_err("%s: can't set led level %d\n", __func__, ret);
 
-#if defined(CONFIG_FEAT_LED_MAX77888)
 	/* change MUIC Control3 to 'Auto Detection' */
 	ret = max77803_muic_set_jigset(0x00);
 	if (unlikely(ret))
 		pr_err("[LED] %s : MUIC 0x0E write failed 0x00 \n", __func__);
-#endif
+
 	return;
 }
 

@@ -378,11 +378,7 @@ static void max77803_set_charge_current(struct max77803_charger_data *charger,
 		max77803_write_reg(charger->max77803->i2c,
 			MAX77803_CHG_REG_CHG_CNFG_02, reg_data);
 	} else {
-#if defined(max77888_charger)
-		reg_data |= ((cur / 40) << 0);
-#else
 		reg_data |= ((cur * 10 / charger->charging_curr_step) << 0);
-#endif
 		max77803_write_reg(charger->max77803->i2c,
 				MAX77803_CHG_REG_CHG_CNFG_02, reg_data);
 	}
@@ -401,11 +397,7 @@ static int max77803_get_charge_current(struct max77803_charger_data *charger)
 	pr_debug("%s: CHG_CNFG_02(0x%02x)\n", __func__, reg_data);
 
 	reg_data &= MAX77803_CHG_CC;
-#if defined(max77888_charger)
-	get_current = reg_data * 40;
-#else
 	get_current = reg_data * 333 / 10;
-#endif
 	pr_debug("%s: get charge current: %dmA\n", __func__, get_current);
 	return get_current;
 }
@@ -751,9 +743,9 @@ static void max77803_charger_initialize(struct max77803_charger_data *charger)
 
 	/*
 	 * charge current 466mA(default)
-	 * (max77888: 480mA(default))
+	 * (max77803: 480mA(default))
 	 * otg current limit 900mA
-	 * (max77888: 350mA/1250mA)
+	 * (max77803: 350mA/1250mA)
 	 */
 	max77803_read_reg(charger->max77803->i2c,
 			MAX77803_CHG_REG_CHG_CNFG_02, &reg_data);
@@ -775,11 +767,7 @@ static void max77803_charger_initialize(struct max77803_charger_data *charger)
 	 * cv voltage 4.2V or 4.35V
 	 * MINVSYS 3.6V(default)
 	 */
-#if defined(max77888_charger)
-	reg_data = (0xD9 << 0);
-#else
 	reg_data = (0xDD << 0);
-#endif
 
 	/*
 	pr_info("%s: battery cv voltage %s, (sysrev %d)\n", __func__,
@@ -1417,11 +1405,6 @@ static __devinit int max77803_charger_probe(struct platform_device *pdev)
 				charger->pmic_ver);
 	}
 
-#if defined(max77888_charger)
-	charger->input_curr_limit_step = 25;
-	charger->wpc_input_curr_limit_step = 20;
-	charger->charging_curr_step= 400;  // 0.1mA unit
-#else
 	if (charger->pmic_ver == 0x04) {
 		charger->input_curr_limit_step = 25;
 		charger->wpc_input_curr_limit_step = 20;
@@ -1431,7 +1414,6 @@ static __devinit int max77803_charger_probe(struct platform_device *pdev)
 		charger->wpc_input_curr_limit_step = 20;
 		charger->charging_curr_step= 333;  // 0.1mA unit
 	}
-#endif
 
 	charger->wqueue =
 	    create_singlethread_workqueue(dev_name(&pdev->dev));
@@ -1573,11 +1555,7 @@ static void max77803_charger_shutdown(struct device *dev)
 	reg_data = 0x04;
 	max77803_write_reg(charger->max77803->i2c,
 		MAX77803_CHG_REG_CHG_CNFG_00, reg_data);
-#if defined(max77888_charger)
-	reg_data = 0x14;
-#else
 	reg_data = 0x19;
-#endif
 	max77803_write_reg(charger->max77803->i2c,
 		MAX77803_CHG_REG_CHG_CNFG_09, reg_data);
 	reg_data = 0x19;

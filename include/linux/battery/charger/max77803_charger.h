@@ -22,11 +22,7 @@
 #include <linux/mfd/max77803-private.h>
 #include <linux/regulator/machine.h>
 
-#if defined(CONFIG_HA)
-#undef max77888_charger
-#else
-#define max77888_charger
-#endif
+#define max77803_charger
 
 #define ENABLE 1
 #define DISABLE 0
