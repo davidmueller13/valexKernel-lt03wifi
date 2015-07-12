@@ -11,8 +11,10 @@ obj-$(CONFIG_ANDROID_LOW_MEMORY_KILLER)	+= lowmemorykiller.o
 obj-$(CONFIG_ANDROID_SWITCH)		+= switch/
 obj-$(CONFIG_ANDROID_INTF_ALARM_DEV)	+= alarm-dev.o
 obj-$(CONFIG_PERSISTENT_TRACER)		+= trace_persistent.o
+
 obj-$(CONFIG_BATTERY_SAMSUNG)		+= samsung/battery/
 obj-$(CONFIG_ICE4_FPGA)			+= samsung/ice4_fpga/
 obj-$(CONFIG_MOTOR_SAMSUNG)		+= samsung/motor/
+obj-y					+= samsung/gud/
 
 CFLAGS_REMOVE_trace_persistent.o = -pg

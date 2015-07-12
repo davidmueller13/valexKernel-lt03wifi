@@ -104,6 +104,8 @@ source "drivers/staging/android/samsung/ice4_fpga/Kconfig"
 
 source "drivers/staging/android/samsung/motor/Kconfig"
 
+source "drivers/staging/android/samsung/gud/Kconfig"
+
 endif # if ANDROID
 
 endmenu
