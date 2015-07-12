@@ -792,6 +792,12 @@ extern const char *device_get_devnode(struct device *dev,
 extern void *dev_get_drvdata(const struct device *dev);
 extern int dev_set_drvdata(struct device *dev, void *data);
 
+extern void lock_device_hotplug(void);
+extern void unlock_device_hotplug(void);
+extern int lock_device_hotplug_sysfs(void);
+extern int device_offline(struct device *dev);
+extern int device_online(struct device *dev);
+
 /*
  * Root device objects for grouping under /sys/devices
  */
