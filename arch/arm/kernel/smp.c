@@ -87,14 +87,8 @@ int __cpu_up(unsigned int cpu, struct task_struct *idle)
 	 * its stack and the page tables.
 	 */
 	secondary_data.stack = task_stack_page(idle) + THREAD_START_SP;
-#ifdef CONFIG_ARM_MPU
-	secondary_data.mpu_rgn_szr = mpu_rgn_info.rgns[MPU_RAM_REGION].drsr;
-#endif
-
-#ifdef CONFIG_MMU
-	secondary_data.pgdir = get_arch_pgd(idmap_pgd);
-	secondary_data.swapper_pg_dir = get_arch_pgd(swapper_pg_dir);
-#endif
+	secondary_data.pgdir = virt_to_phys(idmap_pgd);
+	secondary_data.swapper_pg_dir = virt_to_phys(swapper_pg_dir);
 	sync_cache_w(&secondary_data);
 
 	/*
