@@ -38,7 +38,6 @@ struct cpu_load_info {
 
 static DEFINE_PER_CPU(struct cpu_load_info, cur_cpu_info);
 static DEFINE_MUTEX(dm_hotplug_lock);
-static DEFINE_MUTEX(cpufreq_lock);
 
 static int cpu_util[NR_CPUS];
 static struct pm_qos_request max_cpu_qos_hotplug;
