@@ -51,13 +51,13 @@ static DEFINE_MUTEX(cpufreq_lock);
 static bool exynos_cpufreq_disable;
 static bool exynos_cpufreq_init_done;
 
-int exynos_verify_speed(struct cpufreq_policy *policy)
+static int exynos_verify_speed(struct cpufreq_policy *policy)
 {
 	return cpufreq_frequency_table_verify(policy,
 					      exynos_info->freq_table);
 }
 
-unsigned int exynos_getspeed(unsigned int cpu)
+static unsigned int exynos_getspeed(unsigned int cpu)
 {
 	return clk_get_rate(exynos_info->cpu_clk) / 1000;
 }
