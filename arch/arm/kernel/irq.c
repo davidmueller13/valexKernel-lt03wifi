@@ -128,10 +128,10 @@ void __init init_IRQ(void)
 #ifdef CONFIG_MULTI_IRQ_HANDLER
 void __init set_handle_irq(void (*handle_irq)(struct pt_regs *))
 {
-	if (handle_arch_irq)
-		return;
+        if (handle_arch_irq)
+                return;
 
-	handle_arch_irq = handle_irq;
+        handle_arch_irq = handle_irq;
 }
 #endif
 
