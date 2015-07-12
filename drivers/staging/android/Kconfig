@@ -98,6 +98,8 @@ config ANDROID_INTF_ALARM_DEV
 	  elapsed realtime, and a non-wakeup alarm on the monotonic clock.
 	  Also exports the alarm interface to user-space.
 
+source "drivers/staging/android/samsung/battery/Kconfig"
+
 endif # if ANDROID
 
 endmenu

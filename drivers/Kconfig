@@ -150,8 +150,6 @@ source "drivers/sensorhub/stm/Kconfig"
 
 source "drivers/sensors/Kconfig"
 
-source "drivers/battery/Kconfig"
-
 source "drivers/gud/Kconfig"
 
 source "drivers/ice4_fpga/Kconfig"
