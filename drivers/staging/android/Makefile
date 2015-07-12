@@ -12,5 +12,6 @@ obj-$(CONFIG_ANDROID_SWITCH)		+= switch/
 obj-$(CONFIG_ANDROID_INTF_ALARM_DEV)	+= alarm-dev.o
 obj-$(CONFIG_PERSISTENT_TRACER)		+= trace_persistent.o
 obj-$(CONFIG_BATTERY_SAMSUNG)		+= samsung/battery/
+obj-$(CONFIG_ICE4_FPGA)			+= samsung/ice4_fpga/
 
 CFLAGS_REMOVE_trace_persistent.o = -pg
