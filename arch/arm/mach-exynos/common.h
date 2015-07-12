@@ -68,6 +68,4 @@ extern struct smp_operations exynos_smp_ops;
 
 extern void exynos_cpu_die(unsigned int cpu);
 
-extern void __iomem *pmu_base_addr;
-
 #endif /* __ARCH_ARM_MACH_EXYNOS_COMMON_H */
