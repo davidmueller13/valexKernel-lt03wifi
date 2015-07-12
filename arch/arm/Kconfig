@@ -895,7 +895,6 @@ config ARCH_EXYNOS
 	help
 	  Support for SAMSUNG's EXYNOS SoCs (EXYNOS4/5)
 
-<<<<<<< HEAD
 config ARCH_SHARK
 	bool "Shark"
 	select CPU_SA110
@@ -953,8 +952,6 @@ config ARCH_NOMADIK
 	help
 	  Support for the Nomadik platform by ST-Ericsson
 
-=======
->>>>>>> 136dfa5... ARM: delete mach-shark
 config ARCH_DAVINCI
 	bool "TI DaVinci"
 	select GENERIC_CLOCKEVENTS
@@ -1508,6 +1505,12 @@ config PCI_NANOENGINE
 
 config PCI_SYSCALL
 	def_bool PCI
+
+# Select the host bridge type
+config PCI_HOST_VIA82C505
+	bool
+	depends on PCI && ARCH_SHARK
+	default y
 
 config PCI_HOST_ITE8152
 	bool
