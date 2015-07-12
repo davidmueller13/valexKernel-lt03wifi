@@ -21,4 +21,8 @@
 
 #define ARCH_HAS_SG_CHAIN
 
+#if defined(CONFIG_KEXEC_HARDBOOT)
+#define KEXEC_HB_PAGE_ADDR		UL(0xbfd00000)
+#endif
+
 #endif /* __ASM_ARCH_MEMORY_H */
