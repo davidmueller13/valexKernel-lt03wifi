@@ -142,7 +142,6 @@ obj-$(CONFIG_SENSORS_FINGERPRINT)	+= fingerprint/
 obj-$(CONFIG_SENSORS_SSP)		+= sensorhub/
 obj-$(CONFIG_SENSORS)		+= sensors/
 
-obj-y				+= gud/
 obj-$(CONFIG_SEC_NET_FILTER)	+= secfilter/
 
 ifeq (1, $(shell if [ -d ./drivers/exfat ] ; then echo 1 ; fi))
