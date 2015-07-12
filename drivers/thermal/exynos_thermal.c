@@ -1579,7 +1579,6 @@ static int __devinit exynos_tmu_probe(struct platform_device *pdev)
 
 	return 0;
 err_clk:
-	platform_set_drvdata(pdev, NULL);
 	clk_unprepare(data->clk);
 err_irq:
 	for (i = 0; i < EXYNOS_TMU_COUNT; i++) {
@@ -1621,8 +1620,6 @@ static int __devexit exynos_tmu_remove(struct platform_device *pdev)
 		iounmap(data->base[i]);
 	for (i = 0; i < EXYNOS_TMU_COUNT; i++)
 		release_mem_region(data->mem[i]->start, resource_size(data->mem[i]));
-
-	platform_set_drvdata(pdev, NULL);
 
 	kfree(data);
 
