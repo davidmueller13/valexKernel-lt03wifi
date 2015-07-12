@@ -106,6 +106,8 @@ source "drivers/staging/android/samsung/motor/Kconfig"
 
 source "drivers/staging/android/samsung/gud/Kconfig"
 
+source "drivers/staging/android/samsung/secfilter/Kconfig"
+
 endif # if ANDROID
 
 endmenu

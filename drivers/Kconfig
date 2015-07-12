@@ -148,8 +148,6 @@ source "drivers/sensorhub/stm/Kconfig"
 
 source "drivers/sensors/Kconfig"
 
-source "drivers/secfilter/Kconfig"
-
 source "drivers/irqchip/Kconfig"
 
 endmenu
