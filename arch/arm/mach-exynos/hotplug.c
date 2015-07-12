@@ -26,60 +26,6 @@
 
 extern void change_power_base(unsigned int cpu, void __iomem *base);
 
-static inline void cpu_enter_lowpower_a9(void)
-{
-	unsigned int v;
-
-	flush_cache_all();
-	asm volatile(
-	"	mcr	p15, 0, %1, c7, c5, 0\n"
-	"	mcr	p15, 0, %1, c7, c10, 4\n"
-	/*
-	 * Turn off coherency
-	 */
-	"	mrc	p15, 0, %0, c1, c0, 1\n"
-	"	bic	%0, %0, %3\n"
-	"	mcr	p15, 0, %0, c1, c0, 1\n"
-	"	mrc	p15, 0, %0, c1, c0, 0\n"
-	"	bic	%0, %0, %2\n"
-	"	mcr	p15, 0, %0, c1, c0, 0\n"
-	  : "=&r" (v)
-	  : "r" (0), "Ir" (CR_C), "Ir" (0x40)
-	  : "cc");
-}
-
-static inline void cpu_enter_lowpower_a15(void)
-{
-	unsigned int v, u;
-
-	asm volatile(
-	"       mrc     p15, 0, %0, c1, c0, 0\n"
-	"       bic     %0, %0, %1\n"
-	"       mcr     p15, 0, %0, c1, c0, 0\n"
-	  : "=&r" (v)
-	  : "Ir" (CR_C)
-	  : "cc");
-
-	flush_dcache_level(flush_cache_level_cpu());
-
-	asm volatile(
-	/*
-	* Turn off coherency
-	*/
-	"       mrc     p15, 0, %0, c1, c0, 1\n"
-	"       bic     %0, %0, %2\n"
-	"	ldr	%1, [%3]\n"
-	"	and	%1, %1, #0\n"
-	"	orr	%0, %0, %1\n"
-	"       mcr     p15, 0, %0, c1, c0, 1\n"
-	: "=&r" (v), "=&r" (u)
-	: "Ir" (0x40), "Ir" (EXYNOS_INFORM0)
-	: "cc");
-
-	isb();
-	dsb();
-}
-
 static inline void cpu_leave_lowpower(void)
 {
 	unsigned int v, u;
@@ -174,14 +120,7 @@ void exynos_cpu_die(unsigned int cpu)
 {
 	int spurious = 0;
 
-	/*
-	 * we're ready for shutdown now, so do it
-	 */
-	if (soc_is_exynos5250() || soc_is_exynos5410() || soc_is_exynos5420())
-		cpu_enter_lowpower_a15();
-	else
-		cpu_enter_lowpower_a9();
-	platform_do_lowpower(cpu, &spurious);
+	v7_exit_coherency_flush(louis);
 
 	/*
 	 * bring this CPU back into the world of cache
