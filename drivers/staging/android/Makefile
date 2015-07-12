@@ -16,6 +16,6 @@ obj-$(CONFIG_BATTERY_SAMSUNG)		+= samsung/battery/
 obj-$(CONFIG_ICE4_FPGA)			+= samsung/ice4_fpga/
 obj-$(CONFIG_MOTOR_SAMSUNG)		+= samsung/motor/
 obj-$(CONFIG_MOBICORE)			+= samsung/gud/
-obj-$(CONFIG_SEC_NET_FILTER)		+= secfilter/
+obj-$(CONFIG_SEC_NET_FILTER)		+= samsung/secfilter/
 
 CFLAGS_REMOVE_trace_persistent.o = -pg
