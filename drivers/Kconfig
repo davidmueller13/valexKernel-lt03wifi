@@ -142,8 +142,6 @@ source "drivers/virt/Kconfig"
 
 source "drivers/devfreq/Kconfig"
 
-source "drivers/motor/Kconfig"
-
 source "drivers/fingerprint/Kconfig"
 
 source "drivers/sensorhub/stm/Kconfig"
