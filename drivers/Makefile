@@ -138,8 +138,6 @@ obj-$(CONFIG_HYPERV)		+= hv/
 
 obj-$(CONFIG_PM_DEVFREQ)	+= devfreq/
 
-obj-y		+= motor/
-
 obj-$(CONFIG_SENSORS_FINGERPRINT)	+= fingerprint/
 obj-$(CONFIG_SENSORS_SSP)		+= sensorhub/
 obj-$(CONFIG_SENSORS)		+= sensors/
