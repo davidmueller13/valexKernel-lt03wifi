@@ -1501,16 +1501,12 @@ static int __devinit exynos_tmu_probe(struct platform_device *pdev)
 		}
 	}
 
-	data->clk = devm_clk_get(&pdev->dev, "tmu_apbif");
+	data->clk = clk_get(NULL, "tmu_apbif");
 	if (IS_ERR(data->clk)) {
 		ret = PTR_ERR(data->clk);
 		dev_err(&pdev->dev, "Failed to get clock\n");
 		goto err_irq;
 	}
-
-	ret = clk_prepare(data->clk);
-	if (ret)
-		return ret;
 
 	if (pdata->type == SOC_ARCH_EXYNOS5 ||
 				pdata->type == SOC_ARCH_EXYNOS4)
@@ -1580,7 +1576,7 @@ static int __devinit exynos_tmu_probe(struct platform_device *pdev)
 	return 0;
 err_clk:
 	platform_set_drvdata(pdev, NULL);
-	clk_unprepare(data->clk);
+	clk_put(data->clk);
 err_irq:
 	for (i = 0; i < EXYNOS_TMU_COUNT; i++) {
 		if (data->irq[i])
@@ -1612,7 +1608,7 @@ static int __devexit exynos_tmu_remove(struct platform_device *pdev)
 
 	exynos_unregister_thermal();
 
-	clk_unprepare(data->clk);
+	clk_put(data->clk);
 
 	for (i = 0; i < EXYNOS_TMU_COUNT; i++)
 		free_irq(data->irq[i], data);
