@@ -16,7 +16,6 @@
 #include <linux/reboot.h>
 
 #include <asm/mach/arch.h>
-#include <asm/hardware/gic.h>
 #include <asm/mach-types.h>
 
 #include <plat/adc.h>
@@ -305,7 +304,6 @@ MACHINE_START(SMDK5420, "SMDK5420")
 	.init_early	= smdk5420_init_early,
 	.init_irq	= exynos5_init_irq,
 	.map_io		= smdk5420_map_io,
-	.handle_irq	= gic_handle_irq,
 	.init_machine	= smdk5420_machine_init,
 	.timer		= &exynos4_timer,
 	.restart	= exynos5_restart,
