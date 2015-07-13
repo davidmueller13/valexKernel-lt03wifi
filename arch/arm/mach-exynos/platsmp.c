@@ -279,7 +279,7 @@ static void __init exynos_smp_init_cpus(void)
 	for (i = 0; i < ncores; i++)
 		set_cpu_possible(i, true);
 
-	set_smp_cross_call(gic_raise_softirq);
+	arch_send_wakeup_ipi_mask(cpumask_of(cpu));
 }
 
 static void __init exynos_smp_prepare_cpus(unsigned int max_cpus)
