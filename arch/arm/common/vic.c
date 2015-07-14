@@ -81,6 +81,8 @@ static struct vic_device vic_devices[CONFIG_ARM_VIC_NR];
 
 static int vic_id;
 
+static void vic_handle_irq(struct pt_regs *regs);
+
 /**
  * vic_init2 - common initialisation code
  * @base: Base of the VIC.
@@ -467,7 +469,7 @@ static int handle_one_vic(struct vic_device *vic, struct pt_regs *regs)
  * Keep iterating over all registered VIC's until there are no pending
  * interrupts.
  */
-asmlinkage void __exception_irq_entry vic_handle_irq(struct pt_regs *regs)
+static asmlinkage void __exception_irq_entry vic_handle_irq(struct pt_regs *regs)
 {
 	int i, handled;
 
