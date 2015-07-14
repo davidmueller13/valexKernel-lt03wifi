@@ -7,6 +7,48 @@
 	.text
 
 /*
+ * Implementation of MPIDR hash algorithm through shifting
+ * and OR'ing.
+ *
+ * @dst: register containing hash result
+ * @rtemp0: scratch register 0
+ * @rtemp1: scratch register 1
+ * @rtemp2: scratch register 2
+ * @rs0: register containing affinity level 0 bit shift
+ * @rs1: register containing affinity level 1 bit shift
+ * @rs2: register containing affinity level 2 bit shift
+ * @mpidr: register containing MPIDR value
+ * @mask: register containing MPIDR mask
+ *
+ * Pseudo C-code:
+ *
+ *u32 dst;
+ *
+ *compute_mpidr_hash(u32 rs0, u32 rs1, u32 rs2, u32 mpidr, u32 mask) {
+ *	u32 rtemp0, rtemp1, rtemp2;
+ *	u32 mpidr_masked = mpidr & mask;
+ *	rtemp0 = mpidr_masked & 0xff;
+ *	rtemp1 = mpidr_masked & 0xff00;
+ *	rtemp2 = mpidr_masked & 0xff0000;
+ *	dst = (rtemp0 >> rs0 | rtemp1 >> rs1 | rtemp2 >> rs2);
+ *}
+ */
+.macro compute_mpidr_hash dst, rtemp0, rtemp1, rtemp2, rs0, rs1, rs2, mpidr, mask
+	and	\mpidr, \mpidr, \mask		@ mask out unused MPIDR bits
+	and	\rtemp0, \mpidr, #0xff		@ extracts aff0
+	and	\rtemp1, \mpidr, #0xff00	@ extracts aff1
+	and	\rtemp2, \mpidr, #0xff0000	@ extracts aff2
+  ARM(	mov	\dst, \rtemp0, lsr \rs0)	@ dst=aff0>>rs0
+  ARM(	orr	\dst, \dst, \rtemp1, lsr \rs1)	@ dst|=(aff1>>rs1)
+  ARM(	orr	\dst, \dst, \rtemp2, lsr \rs2)		@ dst|=(aff2>>rs2)
+THUMB(	mov	\rtemp0, \rtemp0, lsr \rs0)		@ aff0>>=rs0
+THUMB(	mov	\rtemp1, \rtemp1, lsr \rs1)		@ aff1>>=rs1
+THUMB(	mov	\rtemp2, \rtemp2, lsr \rs2)		@ aff2>>=rs2
+THUMB(	orr	\dst, \rtemp0, \rtemp1)			@ dst = aff0 | aff1
+THUMB(	orr	\dst, \dst, \rtemp2)			@ dts |= aff2
+.endm
+
+/*
  * Save CPU state for a suspend.  This saves the CPU general purpose
  * registers, and allocates space on the kernel stack to save the CPU
  * specific registers and some other data for resume.
@@ -29,12 +71,18 @@ ENTRY(__cpu_suspend)
 	mov	r1, r4			@ size of save block
 	mov	r2, r5			@ virtual SP
 	ldr	r3, =sleep_save_sp
-#ifdef CONFIG_SMP
+	ldr	r3, [r3, #SLEEP_SAVE_SP_VIRT]
 	ALT_SMP(mrc p15, 0, lr, c0, c0, 5)
-	ALT_UP(mov lr, #0)
-	and	lr, lr, #15
+        ALT_UP_B(1f)
+	ldr	r11, =mpidr_hash
+	/*
+	 * This ldmia relies on the memory layout of the mpidr_hash
+	 * struct mpidr_hash.
+	 */
+	ldmia	r11, {r4-r7}	@ r4 = mpidr mask (r5,r6,r7) = l[0,1,2] shifts
+	compute_mpidr_hash	lr, r8, r9, r10, r5, r6, r7, lr, r4
 	add	r3, r3, lr, lsl #2
-#endif
+1:
 	bl	__cpu_suspend_save
 	adr	lr, BSYM(cpu_suspend_abort)
 	ldmfd	sp!, {r0, pc}		@ call suspend fn
@@ -81,15 +129,23 @@ ENDPROC(cpu_resume_after_mmu)
 	.data
 	.align
 ENTRY(cpu_resume)
-#ifdef CONFIG_SMP
-	adr	r0, sleep_save_sp
-	ALT_SMP(mrc p15, 0, r1, c0, c0, 5)
-	ALT_UP(mov r1, #0)
-	and	r1, r1, #15
-	ldr	r0, [r0, r1, lsl #2]	@ stack phys addr
-#else
-	ldr	r0, sleep_save_sp	@ stack phys addr
-#endif
+	mov	r1, #0
+	ALT_SMP(mrc p15, 0, r0, c0, c0, 5)
+	ALT_UP_B(1f)
+	adr	r2, mpidr_hash_ptr
+	ldr	r3, [r2]
+	add	r2, r2, r3		@ r2 = struct mpidr_hash phys address
+	/*
+	 * This ldmia relies on the memory layout of the mpidr_hash
+	 * struct mpidr_hash.
+	 */
+	ldmia	r2, { r3-r6 }	@ r3 = mpidr mask (r4,r5,r6) = l[0,1,2] shifts
+	compute_mpidr_hash	r1, r7, r8, r9, r4, r5, r6, r0, r3
+1:
+	adr	r0, _sleep_save_sp
+	ldr	r0, [r0, #SLEEP_SAVE_SP_PHYS]
+	ldr	r0, [r0, r1, lsl #2]
+
 	dsb
 	setmode	PSR_I_BIT | PSR_F_BIT | SVC_MODE, r1  @ set SVC, irqs off
 	dsb
@@ -102,8 +158,11 @@ THUMB(	mov	sp, r2			)
 THUMB(	bx	r3			)
 ENDPROC(cpu_resume)
 
-	.align 7
-sleep_save_sp:
-	.rept	CONFIG_NR_CPUS
-	.long	0				@ preserve stack phys ptr here
-	.endr
+	.align 2
+mpidr_hash_ptr:
+	.long	mpidr_hash - .			@ mpidr_hash struct offset
+
+	.type	sleep_save_sp, #object
+ENTRY(sleep_save_sp)
+_sleep_save_sp:
+	.space	SLEEP_SAVE_SP_SZ		@ struct sleep_save_sp
