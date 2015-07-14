@@ -853,7 +853,6 @@ static void __init combiner_init(unsigned int combiner_nr, void __iomem *base,
 
 #ifdef CONFIG_OF
 static const struct of_device_id exynos4_dt_irq_match[] = {
-	{ .compatible = "arm,cortex-a9-gic", .data = gic_of_init, },
 	{},
 };
 #endif
@@ -875,8 +874,10 @@ void __init exynos4_init_irq(void)
 	if (!of_have_populated_dt())
 		gic_init_bases(0, IRQ_PPI(0), S5P_VA_GIC_DIST, S5P_VA_GIC_CPU, gic_bank_offset, NULL);
 #ifdef CONFIG_OF
-	else
+	else {
+		irqchip_init();
 		of_irq_init(exynos4_dt_irq_match);
+	}
 #endif
 	gic_arch_extn.irq_set_wake = s3c_irq_wake;
 
@@ -906,6 +907,7 @@ void __init exynos5_init_irq(void)
 	int irq;
 
 #ifdef CONFIG_OF
+	irqchip_init();
 	of_irq_init(exynos4_dt_irq_match);
 #else
 	gic_init(0, IRQ_PPI(0), S5P_VA_GIC_DIST, S5P_VA_GIC_CPU);
