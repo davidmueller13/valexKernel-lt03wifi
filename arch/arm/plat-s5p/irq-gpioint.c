@@ -18,12 +18,11 @@
 #include <linux/io.h>
 #include <linux/gpio.h>
 #include <linux/slab.h>
+#include <linux/irqchip/chained_irq.h>
 
 #include <mach/map.h>
 #include <plat/gpio-core.h>
 #include <plat/gpio-cfg.h>
-
-#include <asm/mach/irq.h>
 
 #define GPIO_BASE(chip)		(((unsigned long)(chip)->base) & 0xFFFFF000u)
 
