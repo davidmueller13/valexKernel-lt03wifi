@@ -208,6 +208,7 @@ static void __init vic_register(void __iomem *base, unsigned int irq,
 	v->base = base;
 	v->resume_sources = resume_sources;
 	v->irq = irq;
+	set_handle_irq(vic_handle_irq);
 	vic_id++;
 	v->domain = irq_domain_add_legacy(node, 32, irq, 0,
 					  &irq_domain_simple_ops, v);
