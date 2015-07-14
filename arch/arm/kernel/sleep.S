@@ -11,9 +11,6 @@
  * and OR'ing.
  *
  * @dst: register containing hash result
- * @rtemp0: scratch register 0
- * @rtemp1: scratch register 1
- * @rtemp2: scratch register 2
  * @rs0: register containing affinity level 0 bit shift
  * @rs1: register containing affinity level 1 bit shift
  * @rs2: register containing affinity level 2 bit shift
@@ -25,28 +22,32 @@
  *u32 dst;
  *
  *compute_mpidr_hash(u32 rs0, u32 rs1, u32 rs2, u32 mpidr, u32 mask) {
- *	u32 rtemp0, rtemp1, rtemp2;
+ *	u32 aff0, aff1, aff2;
  *	u32 mpidr_masked = mpidr & mask;
- *	rtemp0 = mpidr_masked & 0xff;
- *	rtemp1 = mpidr_masked & 0xff00;
- *	rtemp2 = mpidr_masked & 0xff0000;
- *	dst = (rtemp0 >> rs0 | rtemp1 >> rs1 | rtemp2 >> rs2);
+ *	aff0 = mpidr_masked & 0xff;
+ *	aff1 = mpidr_masked & 0xff00;
+ *	aff2 = mpidr_masked & 0xff0000;
+ *	dst = (aff0 >> rs0 | aff1 >> rs1 | aff2 >> rs2);
  *}
+ * Input registers: rs0, rs1, rs2, mpidr, mask
+ * Output register: dst
+ * Note: input and output registers must be disjoint register sets
+         (eg: a macro instance with mpidr = r1 and dst = r1 is invalid)
  */
-.macro compute_mpidr_hash dst, rtemp0, rtemp1, rtemp2, rs0, rs1, rs2, mpidr, mask
-	and	\mpidr, \mpidr, \mask		@ mask out unused MPIDR bits
-	and	\rtemp0, \mpidr, #0xff		@ extracts aff0
-	and	\rtemp1, \mpidr, #0xff00	@ extracts aff1
-	and	\rtemp2, \mpidr, #0xff0000	@ extracts aff2
-  ARM(	mov	\dst, \rtemp0, lsr \rs0)	@ dst=aff0>>rs0
-  ARM(	orr	\dst, \dst, \rtemp1, lsr \rs1)	@ dst|=(aff1>>rs1)
-  ARM(	orr	\dst, \dst, \rtemp2, lsr \rs2)		@ dst|=(aff2>>rs2)
-THUMB(	mov	\rtemp0, \rtemp0, lsr \rs0)		@ aff0>>=rs0
-THUMB(	mov	\rtemp1, \rtemp1, lsr \rs1)		@ aff1>>=rs1
-THUMB(	mov	\rtemp2, \rtemp2, lsr \rs2)		@ aff2>>=rs2
-THUMB(	orr	\dst, \rtemp0, \rtemp1)			@ dst = aff0 | aff1
-THUMB(	orr	\dst, \dst, \rtemp2)			@ dts |= aff2
-.endm
+	.macro compute_mpidr_hash dst, rs0, rs1, rs2, mpidr, mask
+	and	\mpidr, \mpidr, \mask			@ mask out MPIDR bits
+	and	\dst, \mpidr, #0xff			@ mask=aff0
+ ARM(	mov	\dst, \dst, lsr \rs0		)	@ dst=aff0>>rs0
+ THUMB(	lsr	\dst, \dst, \rs0		)
+	and	\mask, \mpidr, #0xff00			@ mask = aff1
+ ARM(	orr	\dst, \dst, \mask, lsr \rs1	)	@ dst|=(aff1>>rs1)
+ THUMB(	lsr	\mask, \mask, \rs1		)
+ THUMB(	orr	\dst, \dst, \mask		)
+	and	\mask, \mpidr, #0xff0000		@ mask = aff2
+ ARM(	orr	\dst, \dst, \mask, lsr \rs2	)	@ dst|=(aff2>>rs2)
+ THUMB(	lsr	\mask, \mask, \rs2		)
+ THUMB(	orr	\dst, \dst, \mask		)
+	.endm
 
 /*
  * Save CPU state for a suspend.  This saves the CPU general purpose
@@ -136,18 +137,14 @@ ENTRY(cpu_resume)
 	 * struct mpidr_hash.
 	 */
 	ldmia	r2, { r3-r6 }	@ r3 = mpidr mask (r4,r5,r6) = l[0,1,2] shifts
-	compute_mpidr_hash	r1, r7, r8, r9, r4, r5, r6, r0, r3
+	compute_mpidr_hash	r1, r4, r5, r6, r0, r3
 1:
 	adr	r0, _sleep_save_sp
 	ldr	r0, [r0, #SLEEP_SAVE_SP_PHYS]
 	ldr	r0, [r0, r1, lsl #2]
 
-	dsb
 	setmode	PSR_I_BIT | PSR_F_BIT | SVC_MODE, r1  @ set SVC, irqs off
-	dsb
 	@ load phys pgd, stack, resume fn
-  ARM(	ldmia	r0, {r1, r2, r3}	)
-  ARM(	ldmia	r0, {r1, r2, r3}	)
   ARM(	ldmia	r0!, {r1, sp, pc}	)
 THUMB(	ldmia	r0!, {r1, r2, r3}	)
 THUMB(	mov	sp, r2			)
