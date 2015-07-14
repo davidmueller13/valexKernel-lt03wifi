@@ -90,6 +90,11 @@ static void flush_tlb_a15_erratum(void)
 	dummy_flush_tlb_a15_erratum();
 }
 
+static inline void ipi_flush_bp_all(void *ignored)
+{
+	local_flush_bp_all();
+}
+
 void flush_tlb_all(void)
 {
 	if (tlb_ops_need_broadcast())
@@ -157,5 +162,13 @@ void flush_tlb_kernel_range(unsigned long start, unsigned long end)
 	} else
 		local_flush_tlb_kernel_range(start, end);
 	flush_tlb_a15_erratum();
+}
+
+void flush_bp_all(void)
+{
+	if (tlb_ops_need_broadcast())
+		on_each_cpu(ipi_flush_bp_all, NULL, 1);
+	else
+		local_flush_bp_all();
 }
 
