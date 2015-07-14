@@ -443,7 +443,18 @@ static inline void local_flush_bp_all(void)
 		isb();
 }
 
+#include <asm/cputype.h>
 #ifdef CONFIG_ARM_ERRATA_798181
+static inline int erratum_a15_798181(void)
+{
+	unsigned int midr = read_cpuid_id();
+
+	/* Cortex-A15 r0p0..r3p2 affected */
+	if ((midr & 0xff0ffff0) != 0x410fc0f0 || midr > 0x413fc0f2)
+		return 0;
+	return 1;
+}
+
 static inline void dummy_flush_tlb_a15_erratum(void)
 {
 	/*
@@ -453,6 +464,11 @@ static inline void dummy_flush_tlb_a15_erratum(void)
 	dsb();
 }
 #else
+static inline int erratum_a15_798181(void)
+{
+	return 0;
+}
+
 static inline void dummy_flush_tlb_a15_erratum(void)
 {
 }
@@ -535,6 +551,8 @@ static inline void update_mmu_cache(struct vm_area_struct *vma,
 }
 #endif
 
+#define update_mmu_cache_pmd(vma, address, pmd) do { } while (0)
+
 #endif
 
 #elif defined(CONFIG_SMP)	/* !CONFIG_MMU */
@@ -549,6 +567,7 @@ static inline void local_flush_tlb_page(struct vm_area_struct *vma, unsigned lon
 static inline void local_flush_tlb_kernel_page(unsigned long kaddr)						{ }
 static inline void local_flush_tlb_range(struct vm_area_struct *vma, unsigned long start, unsigned long end)	{ }
 static inline void local_flush_tlb_kernel_range(unsigned long start, unsigned long end)				{ }
+static inline void local_flush_bp_all(void)									{ }
 
 extern void flush_tlb_all(void);
 extern void flush_tlb_mm(struct mm_struct *mm);
@@ -556,6 +575,7 @@ extern void flush_tlb_page(struct vm_area_struct *vma, unsigned long uaddr);
 extern void flush_tlb_kernel_page(unsigned long kaddr);
 extern void flush_tlb_range(struct vm_area_struct *vma, unsigned long start, unsigned long end);
 extern void flush_tlb_kernel_range(unsigned long start, unsigned long end);
+extern void flush_bp_all(void);
 #endif	/* __ASSEMBLY__ */
 
 #endif

@@ -65,32 +65,6 @@ static inline void ipi_flush_tlb_kernel_range(void *arg)
 	local_flush_tlb_kernel_range(ta->ta_start, ta->ta_end);
 }
 
-#ifdef CONFIG_ARM_ERRATA_798181
-static int erratum_a15_798181(void)
-{
-	unsigned int midr = read_cpuid_id();
-
-	/* Cortex-A15 r0p0..r3p2 affected */
-	if ((midr & 0xff0ffff0) != 0x410fc0f0 || midr > 0x413fc0f2)
-		return 0;
-	return 1;
-}
-#else
-static int erratum_a15_798181(void)
-{
-	return 0;
-}
-#endif
-
-static void flush_tlb_a15_erratum(void)
-{
-	if (!erratum_a15_798181())
-		return;
-
-	dummy_flush_tlb_a15_erratum();
-	dummy_flush_tlb_a15_erratum();
-}
-
 static inline void ipi_flush_bp_all(void *ignored)
 {
 	local_flush_bp_all();
@@ -107,8 +81,7 @@ static void broadcast_tlb_a15_erratum(void)
 		return;
 
 	dummy_flush_tlb_a15_erratum();
-	smp_call_function_many(cpu_online_mask, ipi_flush_tlb_a15_erratum,
-			       NULL, 1);
+	smp_call_function(ipi_flush_tlb_a15_erratum, NULL, 1);
 }
 
 static void broadcast_tlb_mm_a15_erratum(struct mm_struct *mm)
@@ -123,6 +96,7 @@ static void broadcast_tlb_mm_a15_erratum(struct mm_struct *mm)
 	this_cpu = get_cpu();
 	a15_erratum_get_cpumask(this_cpu, mm, &mask);
 	smp_call_function_many(&mask, ipi_flush_tlb_a15_erratum, NULL, 1);
+	put_cpu();
 }
 
 void flush_tlb_all(void)
@@ -201,4 +175,3 @@ void flush_bp_all(void)
 	else
 		local_flush_bp_all();
 }
-
