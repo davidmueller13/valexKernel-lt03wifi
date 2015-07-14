@@ -10,44 +10,46 @@
 #include <asm/suspend.h>
 #include <asm/tlbflush.h>
 
-extern int __cpu_suspend(unsigned long, int (*)(unsigned long));
+extern int __cpu_suspend(unsigned long, int (*)(unsigned long), u32 cpuid);
 extern void cpu_resume_mmu(void);
 
-#ifdef CONFIG_MMU 
-/* 
- * Hide the first two arguments to __cpu_suspend - these are an implementation 
- * detail which platform code shouldn't have to know about. 
- */ 
-int cpu_suspend(unsigned long arg, int (*fn)(unsigned long)) 
-{ 
-        struct mm_struct *mm = current->active_mm; 
-        int ret; 
- 
-        if (!idmap_pgd) 
-                return -EINVAL; 
- 
-        /* 
-         * Provide a temporary page table with an identity mapping for 
-         * the MMU-enable code, required for resuming.  On successful 
-         * resume (indicated by a zero return code), we need to switch 
+#ifdef CONFIG_MMU
+/*
+ * Hide the first two arguments to __cpu_suspend - these are an implementation
+ * detail which platform code shouldn't have to know about.
+ */
+int cpu_suspend(unsigned long arg, int (*fn)(unsigned long))
+{
+        struct mm_struct *mm = current->active_mm;
+        u32 __mpidr = cpu_logical_map(smp_processor_id());
+        int ret;
+
+        if (!idmap_pgd)
+                return -EINVAL;
+
+        /*
+         * Provide a temporary page table with an identity mapping for
+         * the MMU-enable code, required for resuming.  On successful
+         * resume (indicated by a zero return code), we need to switch
          * back to the correct page tables. 
-         */ 
-        ret = __cpu_suspend(arg, fn); 
-        if (ret == 0) { 
-                cpu_switch_mm(mm->pgd, mm); 
-                local_flush_bp_all(); 
-                local_flush_tlb_all(); 
-        } 
- 
-        return ret; 
-} 
-#else 
-int cpu_suspend(unsigned long arg, int (*fn)(unsigned long)) 
-{ 
-        return __cpu_suspend(arg, fn); 
-} 
-#define        idmap_pgd        NULL 
-#endif 
+         */
+        ret = __cpu_suspend(arg, fn, __mpidr);
+        if (ret == 0) {
+                cpu_switch_mm(mm->pgd, mm);
+                local_flush_bp_all();
+                local_flush_tlb_all();
+        }
+
+        return ret;
+}
+#else
+int cpu_suspend(unsigned long arg, int (*fn)(unsigned long))
+{
+    u32 __mpidr = cpu_logical_map(smp_processor_id());
+	return __cpu_suspend(arg, fn, __mpidr);
+}
+#define        idmap_pgd        NULL
+#endif
 
 /*
  * This is called by __cpu_suspend() to save the state, and do whatever
