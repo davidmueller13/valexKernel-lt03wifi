@@ -20,7 +20,7 @@
 #include <linux/of.h>
 #include <linux/irqchip.h>
 #include <linux/dma-mapping.h>
-#include <linux/irqchip/arm-gic.h>
+#include <linux/irqchip/chained_irq.h>
 
 #include <asm/proc-fns.h>
 #include <asm/exception.h>
