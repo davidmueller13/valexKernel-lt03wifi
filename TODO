@@ -1,11 +1,32 @@
 Current status:
 
-MCPM compiles but not the big.LITTLE switcher.
+Getting nonsensical build errors at the end of the build:
 
-TODO:
+  LD      vmlinux.o
+  MODPOST vmlinux.o
+  GEN     .version
+  CHK     include/generated/compile.h
+  UPD     include/generated/compile.h
+  CC      init/version.o
+  LD      init/built-in.o
+  LD      .tmp_vmlinux1
+arch/arm/common/built-in.o: In function `bL_switch_to':
+/home/valex/linux-android-3.4.y-exynos-lt03wifi/arch/arm/common/bL_switcher.c:196: undefined reference to `gic_get_sgir_physaddr'
+/home/valex/linux-android-3.4.y-exynos-lt03wifi/arch/arm/common/bL_switcher.c:212: undefined reference to `gic_send_sgi'
+/home/valex/linux-android-3.4.y-exynos-lt03wifi/arch/arm/common/bL_switcher.c:230: undefined reference to `gic_migrate_target'
+arch/arm/common/built-in.o: In function `bL_switcher_halve_cpus':
+/home/valex/linux-android-3.4.y-exynos-lt03wifi/arch/arm/common/bL_switcher.c:513: undefined reference to `gic_get_cpu_id'
+arch/arm/mach-exynos/built-in.o: In function `exynos4_init_irq':
+/home/valex/linux-android-3.4.y-exynos-lt03wifi/arch/arm/mach-exynos/common.c:875: undefined reference to `gic_init_bases'
+/home/valex/linux-android-3.4.y-exynos-lt03wifi/arch/arm/mach-exynos/common.c:882: undefined reference to `gic_arch_extn'
+/home/valex/linux-android-3.4.y-exynos-lt03wifi/arch/arm/mach-exynos/common.c:882: undefined reference to `gic_arch_extn'
+arch/arm/mach-exynos/built-in.o: In function `gic_init':
+/home/valex/linux-android-3.4.y-exynos-lt03wifi/include/linux/irqchip/arm-gic.h:76: undefined reference to `gic_init_bases'
+arch/arm/mach-exynos/built-in.o: In function `exynos5_init_irq':
+/home/valex/linux-android-3.4.y-exynos-lt03wifi/arch/arm/mach-exynos/common.c:915: undefined reference to `gic_arch_extn'
+/home/valex/linux-android-3.4.y-exynos-lt03wifi/arch/arm/mach-exynos/common.c:915: undefined reference to `gic_arch_extn'
+Makefile:882: recipe for target '.tmp_vmlinux1' failed
+make: *** [.tmp_vmlinux1] Error 1
 
-* sync kernel/time with upstream
 
-or
-
-* revert the bl_switcher commit that is causing a build error
+This makes no sense at all since as far as I can tell these are all defined in the gic code.
