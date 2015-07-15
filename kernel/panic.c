@@ -80,8 +80,6 @@ void __weak panic_smp_self_stop(void)
 #include <mach/regs-pmu.h>
 #include <linux/io.h>
 
-extern void bL_debug_info(void);
-
 void exynos_core_stat(void)
 {
 	unsigned int cluster, cpu, len = 0;
@@ -143,7 +141,6 @@ void panic(const char *fmt, ...)
 	va_end(args);
 	printk(KERN_EMERG "Kernel panic - not syncing: %s\n",buf);
 #ifdef CONFIG_BL_SWITCHER
-	bL_debug_info();
 	exynos_core_stat();
 #endif
 #ifdef CONFIG_DEBUG_BUGVERBOSE
