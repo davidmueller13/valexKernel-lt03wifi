@@ -229,7 +229,7 @@ static int bL_switch_to(unsigned int new_cluster_id)
 	 * Raise a SGI on the inbound CPU to make sure it doesn't stall
 	 * in a possible WFI, such as the one in bL_do_switch().
 	 */
-	arm_send_ping_ipi(smp_processor_id());
+	/* arm_send_ping_ipi(smp_processor_id()); */
 
 	spin_unlock(&switch_gic_lock);
 
