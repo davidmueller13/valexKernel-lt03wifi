@@ -99,7 +99,7 @@ static int set_enable_mask(const char *val, const struct kernel_param *kp)
 		for_each_online_cpu(i) {
 			if (i == cpuid)
 				continue;
-			arm_send_ping_ipi(i);
+			/* arm_send_ping_ipi(i); */
 		}
 	}
 
