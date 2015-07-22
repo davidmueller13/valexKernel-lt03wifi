@@ -39,13 +39,8 @@
 #include "board-universal5420-pmic.h"
 #include "board-universal5420-gpio.h"
 #include "board-universal5420-thermistor.h"
-
 #ifdef CONFIG_SEC_DEBUG
 #include "mach/sec_debug.h"
-#endif
-
-#ifdef CONFIG_KEXEC_HARDBOOT
-#include <asm/kexec.h>
 #endif
 
 static struct ram_console_platform_data ramconsole_pdata;
@@ -290,19 +285,10 @@ static void __init universal5420_map_io(void)
 #endif
 }
 
-#define RAMCONSOLE_PHYS_ADDR  PLAT_PHYS_OFFSET + SZ_512M
 static struct persistent_ram_descriptor universal5420_prd[] __initdata = {
 	{
 		.name = "ram_console",
-#ifdef CONFIG_KEXEC_HARDBOOT
-                .size = KEXEC_HB_PAGE_ADDR - RAMCONSOLE_PHYS_ADDR,
-       },
-       {
-                .name = "kexec_hb_page",
-                .size = SZ_2M - (KEXEC_HB_PAGE_ADDR - RAMCONSOLE_PHYS_ADDR),
-#else
 		.size = SZ_2M,
-#endif
 	},
 #ifdef CONFIG_PERSISTENT_TRACER
 	{
@@ -315,7 +301,7 @@ static struct persistent_ram_descriptor universal5420_prd[] __initdata = {
 static struct persistent_ram universal5420_pr __initdata = {
 	.descs		= universal5420_prd,
 	.num_descs	= ARRAY_SIZE(universal5420_prd),
-	.start		= RAMCONSOLE_PHYS_ADDR,
+	.start		= PLAT_PHYS_OFFSET + SZ_512M,
 #ifdef CONFIG_PERSISTENT_TRACER
 	.size		= 3 * SZ_1M,
 #else
