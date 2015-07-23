@@ -649,27 +649,6 @@ static void __init gic_pm_init(struct gic_chip_data *gic)
 }
 #endif
 
-#ifdef CONFIG_SMP
-void gic_raise_softirq(const struct cpumask *mask, unsigned int irq)
-{
-	int cpu;
-	unsigned long map = 0;
-
-	/* Convert our logical CPU mask into a physical one. */
-	for_each_cpu(cpu, mask)
-		map |= 1 << cpu_logical_map(cpu);
-
-	/*
-	 * Ensure that stores to Normal memory are visible to the
-	 * other CPUs before issuing the IPI.
-	 */
-	dsb();
-
-	/* this always happens on GIC0 */
-	writel_relaxed(map << 16 | irq, gic_data_dist_base(&gic_data[0]) + GIC_DIST_SOFTINT);
-}
-#endif
-
 static int gic_irq_domain_map(struct irq_domain *d, unsigned int irq,
 				irq_hw_number_t hw)
 {
@@ -712,6 +691,81 @@ const struct irq_domain_ops gic_irq_domain_ops = {
 	.map = gic_irq_domain_map,
 	.xlate = gic_irq_domain_xlate,
 };
+
+#ifdef CONFIG_SMP
+void gic_raise_softirq(const struct cpumask *mask, unsigned int irq)
+{
+	int cpu;
+	unsigned long map = 0, flags;
+
+	raw_spin_lock_irqsave(&irq_controller_lock, flags);
+
+	/* Convert our logical CPU mask into a physical one. */
+	for_each_cpu(cpu, mask)
+		map |= gic_cpu_map[cpu];
+
+	/*
+	 * Ensure that stores to Normal memory are visible to the
+	 * other CPUs before issuing the IPI.
+	 */
+	dsb();
+
+	/* this always happens on GIC0 */
+	writel_relaxed(map << 16 | irq, gic_data_dist_base(&gic_data[0]) + GIC_DIST_SOFTINT);
+
+	raw_spin_unlock_irqrestore(&irq_controller_lock, flags);
+}
+#endif
+
+#ifdef CONFIG_BL_SWITCHER
+/*
+ * gic_migrate_target - migrate IRQs to another PU interface
+ *
+ * @new_cpu_id: the CPU target ID to migrate IRQs to
+ *
+ * Migrate all peripheral interrupts with a target matching the current CPU
+ * to the interface corresponding to @new_cpu_id.  The CPU interface mapping
+ * is also updated.  Targets to other CPU interfaces are unchanged.
+ * This must be called with IRQs locally disabled.
+ */
+void gic_migrate_target(unsigned int new_cpu_id)
+{
+	unsigned int old_cpu_id, gic_irqs, gic_nr = 0;
+	void __iomem *dist_base;
+	int i, ror_val, cpu = smp_processor_id();
+	u32 val, old_mask, active_mask;
+
+	if (gic_nr >= MAX_GIC_NR)
+		BUG();
+
+	dist_base = gic_data_dist_base(&gic_data[gic_nr]);
+	if (!dist_base)
+		return;
+	gic_irqs = gic_data[gic_nr].gic_irqs;
+
+	old_cpu_id = __ffs(gic_cpu_map[cpu]);
+	old_mask = 0x01010101 << old_cpu_id;
+	ror_val = (old_cpu_id - new_cpu_id) & 31;
+
+	raw_spin_lock(&irq_controller_lock);
+
+	per_cpu(is_switching, cpu) = true;
+
+	gic_cpu_map[cpu] = 1 << new_cpu_id;
+
+	for (i = 8; i < DIV_ROUND_UP(gic_irqs, 4); i++) {
+		val = readl_relaxed(dist_base + GIC_DIST_TARGET + i * 4);
+		active_mask = val & old_mask;
+		if (active_mask) {
+			val &= ~active_mask;
+			val |= ror32(active_mask, ror_val);
+			writel_relaxed(val, dist_base + GIC_DIST_TARGET + i * 4);
+		}
+	}
+
+	raw_spin_unlock(&irq_controller_lock);
+}
+#endif
 
 void __init gic_init_bases(unsigned int gic_nr, int irq_start,
 			   void __iomem *dist_base, void __iomem *cpu_base,

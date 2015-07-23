@@ -14,6 +14,7 @@
 #include <linux/io.h>
 #include <linux/notifier.h>
 #include <linux/reboot.h>
+#include <linux/irqchip/arm-gic.h>
 
 #include <asm/mach/arch.h>
 #include <asm/mach-types.h>
