@@ -61,7 +61,8 @@ struct secondary_data secondary_data;
 volatile int pen_release = -1;
 
 enum ipi_msg_type {
-	IPI_TIMER = 2,
+	IPI_PING = 1,
+	IPI_TIMER,
 	IPI_RESCHEDULE,
 	IPI_CALL_FUNC,
 	IPI_CALL_FUNC_SINGLE,
@@ -411,6 +412,11 @@ void __init set_smp_cross_call(void (*fn)(const struct cpumask *, unsigned int))
 		smp_cross_call = fn;
 }
 
+void arm_send_ping_ipi(int cpu)
+{
+	smp_cross_call(cpumask_of(cpu), IPI_PING);
+}
+
 void arch_send_call_function_ipi_mask(const struct cpumask *mask)
 {
 	smp_cross_call(mask, IPI_CALL_FUNC);
@@ -646,6 +652,8 @@ void handle_IPI(int ipinr, struct pt_regs *regs)
 	sec_debug_irq_log(ipinr, do_IPI, 1);
 
 	switch (ipinr) {
+	case IPI_PING:
+		break;
 
 #ifdef CONFIG_GENERIC_CLOCKEVENTS_BROADCAST
 	case IPI_TIMER:

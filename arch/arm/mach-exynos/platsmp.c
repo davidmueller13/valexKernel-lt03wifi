@@ -225,8 +225,8 @@ static int exynos_boot_secondary(unsigned int cpu, struct task_struct *idle)
 
 		if (soc_is_exynos5410() || soc_is_exynos5420())
 			dsb_sev();
-		/* else
-			arm_send_ping_ipi(cpu); */
+		else
+			arm_send_ping_ipi(cpu);
 
 		if (pen_release == -1)
 			break;
