@@ -17,7 +17,6 @@
 #include <linux/reboot.h>
 
 #include <asm/mach/arch.h>
-#include <asm/hardware/gic.h>
 #include <asm/mach-types.h>
 #include <asm/system_info.h>
 
@@ -364,7 +363,6 @@ MACHINE_START(UNIVERSAL5410, "UNIVERSAL5410")
 	.init_early	= universal5410_init_early,
 	.init_irq	= exynos5_init_irq,
 	.map_io		= universal5410_map_io,
-	.handle_irq	= gic_handle_irq,
 	.init_machine	= universal5410_machine_init,
 	.timer		= &exynos4_timer,
 	.restart	= exynos5_restart,

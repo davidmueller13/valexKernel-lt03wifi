@@ -15,7 +15,6 @@
 #include <linux/serial_core.h>
 
 #include <asm/mach/arch.h>
-#include <asm/hardware/gic.h>
 #include <mach/map.h>
 
 #include <plat/cpu.h>
@@ -82,7 +81,6 @@ DT_MACHINE_START(EXYNOS4210_DT, "Samsung Exynos4 (Flattened Device Tree)")
 	.init_irq	= exynos4_init_irq,
 	.smp		= smp_ops(exynos_smp_ops),
 	.map_io		= exynos4210_dt_map_io,
-	.handle_irq	= gic_handle_irq,
 	.init_machine	= exynos4210_dt_machine_init,
 	.timer		= &exynos4_timer,
 	.dt_compat	= exynos4210_dt_compat,
