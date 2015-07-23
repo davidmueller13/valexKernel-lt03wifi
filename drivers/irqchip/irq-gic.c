@@ -869,56 +869,6 @@ void gic_secondary_init(unsigned int gic_nr)
 	gic_cpu_init(&gic_data[gic_nr]);
 }
 
-#ifdef CONFIG_BL_SWITCHER
-/*
- * gic_migrate_target - migrate IRQs to another PU interface
- *
- * @new_cpu_id: the CPU target ID to migrate IRQs to
- *
- * Migrate all peripheral interrupts with a target matching the current CPU
- * to the interface corresponding to @new_cpu_id.  The CPU interface mapping
- * is also updated.  Targets to other CPU interfaces are unchanged.
- * This must be called with IRQs locally disabled.
- */
-void gic_migrate_target(unsigned int new_cpu_id)
-{
-	unsigned int old_cpu_id, gic_irqs, gic_nr = 0;
-	void __iomem *dist_base;
-	int i, ror_val, cpu = smp_processor_id();
-	u32 val, old_mask, active_mask;
-
-	if (gic_nr >= MAX_GIC_NR)
-		BUG();
-
-	dist_base = gic_data_dist_base(&gic_data[gic_nr]);
-	if (!dist_base)
-		return;
-	gic_irqs = gic_data[gic_nr].gic_irqs;
-
-	old_cpu_id = __ffs(gic_cpu_map[cpu]);
-	old_mask = 0x01010101 << old_cpu_id;
-	ror_val = (old_cpu_id - new_cpu_id) & 31;
-
-	raw_spin_lock(&irq_controller_lock);
-
-	per_cpu(is_switching, cpu) = true;
-
-	gic_cpu_map[cpu] = 1 << new_cpu_id;
-
-	for (i = 8; i < DIV_ROUND_UP(gic_irqs, 4); i++) {
-		val = readl_relaxed(dist_base + GIC_DIST_TARGET + i * 4);
-		active_mask = val & old_mask;
-		if (active_mask) {
-			val &= ~active_mask;
-			val |= ror32(active_mask, ror_val);
-			writel_relaxed(val, dist_base + GIC_DIST_TARGET + i * 4);
-		}
-	}
-
-	raw_spin_unlock(&irq_controller_lock);
-}
-#endif
-
 #ifdef CONFIG_OF
 static int gic_cnt __initdata = 0;
 
