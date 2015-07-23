@@ -1,5 +1,4 @@
 config IRQCHIP
-Add a comment to this line
 	def_bool y
 	depends on OF_IRQ
 
