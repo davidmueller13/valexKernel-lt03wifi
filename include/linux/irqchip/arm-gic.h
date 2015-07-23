@@ -1,5 +1,5 @@
 /*
- *  arch/arm/include/asm/hardware/gic.h
+ *  include/linux/irqchip/arm-gic.h
  *
  *  Copyright (C) 2002 ARM Limited, All Rights Reserved.
  *
@@ -7,10 +7,8 @@
  * it under the terms of the GNU General Public License version 2 as
  * published by the Free Software Foundation.
  */
-#ifndef __ASM_ARM_HARDWARE_GIC_H
-#define __ASM_ARM_HARDWARE_GIC_H
-
-#include <linux/compiler.h>
+#ifndef __LINUX_IRQCHIP_ARM_GIC_H
+#define __LINUX_IRQCHIP_ARM_GIC_H
 
 #define GIC_CPU_CTRL			0x00
 #define GIC_CPU_PRIMASK			0x04
@@ -34,19 +32,14 @@
 #define GIC_DIST_SGI_PENDING_CLEAR	0xf10
 #define GIC_DIST_SGI_PENDING_SET	0xf20
 
-#ifndef __ASSEMBLY__
-#include <linux/irqdomain.h>
 struct device_node;
 
 extern struct irq_chip gic_arch_extn;
 
 void gic_init_bases(unsigned int, int, void __iomem *, void __iomem *,
 		    u32 offset, struct device_node *);
-int gic_of_init(struct device_node *node, struct device_node *parent);
 void gic_secondary_init(unsigned int);
-void gic_handle_irq(struct pt_regs *regs);
 void gic_cascade_irq(unsigned int gic_nr, unsigned int irq);
-void gic_raise_softirq(const struct cpumask *mask, unsigned int irq);
 
 static inline void gic_init(unsigned int nr, int start,
 			    void __iomem *dist , void __iomem *cpu)
@@ -55,7 +48,5 @@ static inline void gic_init(unsigned int nr, int start,
 }
 
 void gic_migrate_target(unsigned int new_cpu_id);
-
-#endif
 
 #endif
