@@ -1,7 +1,7 @@
 VERSION = 3
 PATCHLEVEL = 4
 SUBLEVEL = 106
-EXTRAVERSION = -valex-v2.0-RC1
+EXTRAVERSION = -valex-v2.0-RC2
 NAME = Saber-toothed Squirrel
 
 # *DOCUMENTATION*
