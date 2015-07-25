@@ -23,6 +23,7 @@
 #include <linux/init.h>
 #include <linux/nmi.h>
 #include <linux/dmi.h>
+#include <linux/console.h>
 #include "sched/sched.h"
 #ifdef CONFIG_SEC_DEBUG_SUBSYS
 #include <mach/sec_debug.h>
@@ -176,6 +177,13 @@ void panic(const char *fmt, ...)
 	kmsg_dump(KMSG_DUMP_PANIC);
 
 	atomic_notifier_call_chain(&panic_notifier_list, 0, buf);
+
+	/*
+	 * Unlock the console anyway here, in case it's occupied by another
+	 * one which has no chance to unlock the console thus prevents the
+	 * panic log prints on the console.
+	 */
+	console_unlock();
 
 	bust_spinlocks(0);
 
