@@ -53,7 +53,7 @@ static ssize_t exynos_bL_manual_switch_store(struct kobject *kobj,
 		struct kobj_attribute *attr, const char *buf, size_t count)
 {
 #ifndef CONFIG_ARM_EXYNOS_IKS_CPUFREQ
-	unsigned int cpu, cluster;
+	unsigned int cpu, new_cluster_id;
 
 	if (count < 4 || buf[4]) {
 		count = -EINVAL;
@@ -70,13 +70,11 @@ static ssize_t exynos_bL_manual_switch_store(struct kobject *kobj,
 	}
 
 	cpu = buf[0] - '0';
-	cluster = buf[2] - '0';
+	new_cluster_id = buf[2] - '0';
 
-	if (unlikely(is_cci_enabled())) {
+	if (is_cci_enabled()) {
 		if(cpu_online(cpu))
-			bL_switch_request(cpu, cluster);
-	} else {
-		bL_cluster_switch_request(cluster);
+			bL_switch_request(cpu, new_cluster_id);
 	}
 
 out:
@@ -204,6 +202,11 @@ static long long get_ns(void)
 	return timespec_to_ns(&ts);
 }
 
+enum switch_event {
+       SWITCH_ENTER,
+       SWITCH_EXIT,
+};
+
 static int
 exynos_bL_noti_handler(struct notifier_block *nb, unsigned long cmd, void *ptr)
 {
@@ -243,7 +246,7 @@ static int __init exynos_bL_sys_if_init(void)
 		return -ENOMEM;
 	}
 
-	ret = register_bL_swicher_notifier(&exynos_bL_nb);
+	ret = bL_switcher_register_notifier(&exynos_bL_nb);
 	if (ret)
 		pr_err("Fail to register switcher notifier\n");
 

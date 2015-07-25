@@ -281,8 +281,6 @@ obj-$(CONFIG_EXYNOS5_SETUP_JPEG)			+= setup-jpeg.o
 obj-$(CONFIG_ARCH_EXYNOS5)		+= resetreason.o
 obj-$(CONFIG_EXYNOS_TMU)		+= tmu-exynos.o
 
-obj-$(CONFIG_BL_SWITCHER)		+= bL_control.o bL_setup.o
-
 obj-$(CONFIG_MACH_UNIVERSAL5420)	+= sec-reboot.o
 obj-$(CONFIG_SEC_DEBUG)			+= sec_debug.o sec_getlog.o sec_gaf.o
 obj-$(CONFIG_SEC_LOG)			+= sec_log.o
