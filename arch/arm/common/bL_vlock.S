@@ -92,5 +92,5 @@ ENTRY(vlock_unlock)
         strb    r1, [r0, #VLOCK_OWNER_OFFSET]
         dsb
         sev
-        mov     pc, lr
+        ret     lr
 ENDPROC(vlock_unlock)
