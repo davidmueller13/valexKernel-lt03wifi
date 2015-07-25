@@ -450,6 +450,10 @@ static void gic_cpu_init(struct gic_chip_data *gic)
 
 	writel_relaxed(0xf0, base + GIC_CPU_PRIMASK);
 	writel_relaxed(1, base + GIC_CPU_CTRL);
+#if defined(CONFIG_BL_SWITCHER)
+	per_cpu(is_switching, cpu) = false;
+#endif
+
 }
 
 void gic_cpu_if_down(void)
@@ -491,6 +495,18 @@ static void gic_dist_save(unsigned int gic_nr)
 	for (i = 0; i < DIV_ROUND_UP(gic_irqs, 32); i++)
 		gic_data[gic_nr].saved_spi_enable[i] =
 			readl_relaxed(dist_base + GIC_DIST_ENABLE_SET + i * 4);
+
+#if defined(CONFIG_BL_SWITCHER)
+	if (per_cpu(is_switching, smp_processor_id()) == true) {
+		ptr = __this_cpu_ptr(gic_data[gic_nr].saved_sgi_pending);
+		for (i = 0; i < DIV_ROUND_UP(16, 4); i++) {
+			ptr[i] = readl_relaxed(dist_base +
+				GIC_DIST_SGI_PENDING_SET + i * 4);
+			writel_relaxed(ptr[i],
+				dist_base + GIC_DIST_SGI_PENDING_CLEAR + i * 4);
+		}
+	}
+#endif
 }
 
 /*
@@ -589,6 +605,15 @@ static void gic_cpu_restore(unsigned int gic_nr)
 	for (i = 0; i < DIV_ROUND_UP(32, 4); i++)
 		writel_relaxed(0xa0a0a0a0, dist_base + GIC_DIST_PRI + i * 4);
 
+#if defined(CONFIG_BL_SWITCHER)
+	if (per_cpu(is_switching, smp_processor_id()) == true) {
+		ptr = __this_cpu_ptr(gic_data[gic_nr].saved_sgi_pending);
+		for (i = 0; i < DIV_ROUND_UP(16, 4); i++)
+			writel_relaxed(ptr[i],
+				dist_base + GIC_DIST_SGI_PENDING_SET + i * 4);
+		per_cpu(is_switching, smp_processor_id()) = false;
+	}
+#endif
 	writel_relaxed(0xf0, cpu_base + GIC_CPU_PRIMASK);
 	writel_relaxed(1, cpu_base + GIC_CPU_CTRL);
 }
@@ -738,6 +763,8 @@ void gic_migrate_target(unsigned int new_cpu_id)
 	ror_val = (cur_cpu_id - new_cpu_id) & 31;
 
 	raw_spin_lock(&irq_controller_lock);
+
+	per_cpu(is_switching, cpu) = true;
 
 	/* Update the target interface for this logical CPU */
 	gic_cpu_map[cpu] = 1 << new_cpu_id;
