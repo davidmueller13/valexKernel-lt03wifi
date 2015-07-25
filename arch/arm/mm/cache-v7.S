@@ -29,7 +29,7 @@ ENTRY(v7_flush_icache_all)
 	mov	r0, #0
 	ALT_SMP(mcr	p15, 0, r0, c7, c1, 0)		@ invalidate I-cache inner shareable
 	ALT_UP(mcr	p15, 0, r0, c7, c5, 0)		@ I+BTB cache invalidate
-	mov	pc, lr
+	ret	lr
 ENDPROC(v7_flush_icache_all)
 
  /*
@@ -45,7 +45,7 @@ ENTRY(v7_flush_dcache_louis)
 	mrc	p15, 1, r0, c0, c0, 1		@ read clidr, r0 = clidr
 	ands	r3, r0, #0xe00000		@ extract LoUIS from clidr
 	mov	r3, r3, lsr #20			@ r3 = LoUIS * 2
-	moveq	pc, lr				@ return if level == 0
+	reteq	lr				@ return if level == 0
 	mov	r10, #0				@ r10 (starting level) = 0
 	b	loop1				@ start flushing cache levels
 ENDPROC(v7_flush_dcache_louis)
@@ -129,7 +129,7 @@ finished:
 	mcr	p15, 2, r10, c0, c0, 0		@ select current cache level in cssr
 	dsb
 	isb
-	mov	pc, lr
+	ret	lr
 ENDPROC(v7_flush_dcache_all)
 
 /*
@@ -152,7 +152,7 @@ ENTRY(v7_flush_kern_cache_all)
 	ALT_UP(mcr	p15, 0, r0, c7, c5, 0)	@ I+BTB cache invalidate
  ARM(	ldmfd	sp!, {r4-r5, r7, r9-r11, lr}	)
  THUMB(	ldmfd	sp!, {r4-r7, r9-r11, lr}	)
-	mov	pc, lr
+	ret	lr
 ENDPROC(v7_flush_kern_cache_all)
 
 /*
@@ -170,7 +170,7 @@ ENTRY(v7_flush_kern_cache_louis)
 	ALT_UP(mcr	p15, 0, r0, c7, c5, 0)	@ I+BTB cache invalidate
  ARM(	ldmfd	sp!, {r4-r5, r7, r9-r11, lr}	)
  THUMB(	ldmfd	sp!, {r4-r7, r9-r11, lr}	)
-	mov	pc, lr
+	ret	lr
 ENDPROC(v7_flush_kern_cache_louis)
 
 /*
@@ -193,7 +193,7 @@ ENTRY(v7_flush_kern_dcache_level)
 	blls	v7_flush_dcache_level		@ jump if 0 < level <=7
  ARM(	ldmfd	sp!, {r4-r5, r7, r9-r11, lr}	)
  THUMB(	ldmfd	sp!, {r4-r7, r9-r11, lr}	)
-	mov	pc, lr
+	ret	lr
 ENDPROC(v7_flush_kern_dcache_level)
 
 /*
@@ -219,7 +219,7 @@ ENTRY(v7_flush_user_cache_all)
  *	- we have a VIPT cache.
  */
 ENTRY(v7_flush_user_cache_range)
-	mov	pc, lr
+	ret	lr
 ENDPROC(v7_flush_user_cache_all)
 ENDPROC(v7_flush_user_cache_range)
 
@@ -281,7 +281,7 @@ ENTRY(v7_coherent_user_range)
 	ALT_UP(mcr	p15, 0, r0, c7, c5, 6)	@ invalidate BTB
 	dsb
 	isb
-	mov	pc, lr
+	ret	lr
 
 /*
  * Fault handling for the cache operation above. If the virtual address in r0
@@ -323,7 +323,7 @@ ENTRY(v7_flush_kern_dcache_area)
 	cmp	r0, r1
 	blo	1b
 	dsb
-	mov	pc, lr
+	ret	lr
 ENDPROC(v7_flush_kern_dcache_area)
 
 /*
@@ -356,7 +356,7 @@ v7_dma_inv_range:
 	cmp	r0, r1
 	blo	1b
 	dsb
-	mov	pc, lr
+	ret	lr
 ENDPROC(v7_dma_inv_range)
 
 /*
@@ -378,7 +378,7 @@ v7_dma_clean_range:
 	cmp	r0, r1
 	blo	1b
 	dsb
-	mov	pc, lr
+	ret	lr
 ENDPROC(v7_dma_clean_range)
 
 /*
@@ -400,7 +400,7 @@ ENTRY(v7_dma_flush_range)
 	cmp	r0, r1
 	blo	1b
 	dsb
-	mov	pc, lr
+	ret	lr
 ENDPROC(v7_dma_flush_range)
 
 /*
@@ -426,7 +426,7 @@ ENTRY(v7_dma_unmap_area)
 	add	r1, r1, r0
 	teq	r2, #DMA_TO_DEVICE
 	bne	v7_dma_inv_range
-	mov	pc, lr
+	ret	lr
 ENDPROC(v7_dma_unmap_area)
 
 	__INITDATA
