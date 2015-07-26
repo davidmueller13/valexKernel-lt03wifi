@@ -6352,7 +6352,7 @@ build_overlap_sched_groups(struct sched_domain *sd, int cpu)
 
 		cpumask_or(covered, covered, sg_span);
 
-		sg->sgp = *per_cpu_ptr(sdd->sgp, cpumask_first(sg_span));
+		sg->sgp = *per_cpu_ptr(sdd->sgp, i);
 		atomic_inc(&sg->sgp->ref);
 
 		/*
@@ -6363,8 +6363,11 @@ build_overlap_sched_groups(struct sched_domain *sd, int cpu)
 		sg->sgp->power = SCHED_POWER_SCALE * cpumask_weight(sg_span);
 		sg->sgp->power_orig = sg->sgp->power;
 
-		if (cpumask_test_cpu(cpu, sg_span))
+		if ((!groups && cpumask_test_cpu(cpu, sg_span)) ||
+			       cpumask_first(sg_span) == cpu) {
+			WARN_ON_ONCE(!cpumask_test_cpu(cpu, sg_span));
 			groups = sg;
+		}
 
 		if (!first)
 			first = sg;
