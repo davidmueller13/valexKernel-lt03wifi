@@ -1,0 +1,13 @@
+#
+# Bus Devices
+#
+
+menu "Bus devices"
+
+config ARM_CCI
+	bool "ARM CCI driver support"
+	depends on ARM
+	help
+	  Driver supporting the CCI cache coherent interconnect for ARM
+	  platforms.
+endmenu
