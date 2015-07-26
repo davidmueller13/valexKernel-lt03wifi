@@ -35,6 +35,7 @@
 @ that is being targetted.
 
 #include <linux/linkage.h>
+#include <asm/assembler.h>
 
 .text
 

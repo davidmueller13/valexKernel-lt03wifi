@@ -21,6 +21,7 @@
 
 
 #include <linux/linkage.h>
+#include <asm/assembler.h>
 #include <asm/bL_vlock.h>
 
 #if VLOCK_VOTING_SIZE > 4
