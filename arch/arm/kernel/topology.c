@@ -306,18 +306,18 @@ void __init arch_get_fast_and_slow_cpus(struct cpumask *fast,
 	/*
 	 * Else, parse device tree for little cores.
 	 */
-	while ((cn = of_find_node_by_type(cn, "cpu"))) {
+	// while ((cn = of_find_node_by_type(cn, "cpu"))) {
 
-		if (cpu >= num_possible_cpus())
-			break;
+	//	if (cpu >= num_possible_cpus())
+	//		break;
 
-		if (is_little_cpu(cn))
-			cpumask_set_cpu(cpu, slow);
-		else
-			cpumask_set_cpu(cpu, fast);
+	//	if (is_little_cpu(cn))
+	//		cpumask_set_cpu(cpu, slow);
+	//	else
+	//		cpumask_set_cpu(cpu, fast);
 
-		cpu++;
-	}
+	//	cpu++;
+//	}
 
 	if (!cpumask_empty(fast) && !cpumask_empty(slow))
 		return;
