@@ -134,6 +134,10 @@ static int map_cpu_event(struct perf_event *event,
 {
 	u64 config = event->attr.config;
 
+	/* does not support taken branch sampling */
+	if (has_branch_stack(event))
+		return -EOPNOTSUPP;
+
 	switch (event->attr.type) {
 	case PERF_TYPE_HARDWARE:
 		return armpmu_map_event(event_map, config);
