@@ -19,8 +19,10 @@
 #include <linux/of_irq.h>
 #include <linux/of_platform.h>
 
+#include <asm/cputype.h>
 #include <asm/setup.h>
 #include <asm/page.h>
+#include <asm/smp_plat.h>
 #include <asm/mach/arch.h>
 #include <asm/mach-types.h>
 
