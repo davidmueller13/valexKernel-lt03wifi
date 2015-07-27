@@ -18,6 +18,7 @@
 #include <linux/sched.h>
 #include <linux/serial_core.h>
 #include <linux/of.h>
+#include <linux/of_irq.h>
 #include <linux/irqchip.h>
 #include <linux/dma-mapping.h>
 #include <linux/irqchip/chained_irq.h>
@@ -853,7 +854,6 @@ static void __init combiner_init(unsigned int combiner_nr, void __iomem *base,
 
 #ifdef CONFIG_OF
 static const struct of_device_id exynos4_dt_irq_match[] = {
-	{ .compatible = "arm,cortex-a9-gic", .data = gic_of_init, },
 	{},
 };
 #endif
