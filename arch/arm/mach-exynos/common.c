@@ -851,13 +851,6 @@ static void __init combiner_init(unsigned int combiner_nr, void __iomem *base,
 			IRQ_NOREQUEST | IRQ_NOPROBE, 0);
 	}
 }
-
-#ifdef CONFIG_OF
-static const struct of_device_id exynos4_dt_irq_match[] = {
-	{},
-};
-#endif
-
 static inline void __combiner_init(int combiner_gr, int irq)
 {
 	combiner_init(combiner_gr, (void __iomem *)S5P_VA_COMBINER(combiner_gr),
@@ -908,7 +901,6 @@ void __init exynos5_init_irq(void)
 
 #ifdef CONFIG_OF
 	irqchip_init();
-	of_irq_init(exynos4_dt_irq_match);
 #else
 	gic_init(0, IRQ_PPI(0), S5P_VA_GIC_DIST, S5P_VA_GIC_CPU);
 #endif
