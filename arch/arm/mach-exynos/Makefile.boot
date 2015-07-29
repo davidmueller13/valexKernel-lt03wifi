@@ -8,3 +8,4 @@ zreladdr-y	+= $(__ZRELADDR)
 params_phys-y	:= $(__PARAMS_PHYS)
 
 dtb-$(CONFIG_MACH_EXYNOS5_DT) += exynos5410-smdk5410.dtb
+dtb-$(CONFIG_MACH_EXYNOS5_DT) += exynos5420-smdk5420.dtb
