@@ -1,0 +1,6 @@
+ashldi3.S
+bswapsdi2.S
+lib1funcs.S
+piggy.gzip
+vmlinux
+vmlinux.lds
