@@ -84,6 +84,9 @@ void __cpu_suspend_save(u32 *ptr, u32 ptrsz, u32 sp, u32 *save_ptr)
 			  virt_to_phys(save_ptr) + sizeof(*save_ptr));
 }
 
+/* By default the platform cpu_resume() is the same as cpu_resume */
+void (*plat_cpu_resume)(void) = cpu_resume;
+
 extern struct sleep_save_sp sleep_save_sp;
 
 static int cpu_suspend_alloc_sp(void)
