@@ -19,6 +19,7 @@
 #include <linux/fs.h>
 #include <linux/delay.h>
 #include <linux/arm-cci.h>
+#include <linux/jiffies.h>
 
 #include <asm/mcpm.h>
 #include <asm/cputype.h>
@@ -161,7 +162,7 @@ static void clear_coherency(void)
 		"orr	%0, %0, %1\n"
 		"mcr	p15, 0, %0, c1, c0, 1\n"
 		: "=&r" (v), "=&r" (u)
-		: "Ir" (0x40), "Ir" (S5P_INFORM0)
+		: "Ir" (0x40), "Ir" (EXYNOS_INFORM0)
 		: "cc");
 }
 

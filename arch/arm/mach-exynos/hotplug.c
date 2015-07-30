@@ -104,8 +104,6 @@ static void exynos_power_down_cpu(unsigned int cpu)
 	void __iomem *power_base;
 	unsigned int pwr_offset = 0;
 
-	set_boot_flag(cpu, HOTPLUG);
-
 	if (soc_is_exynos5410()) {
 		int cluster_id = read_cpuid_mpidr() & 0x100;
 		if (samsung_rev() < EXYNOS5410_REV_1_0) {

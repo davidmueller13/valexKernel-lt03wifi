@@ -452,8 +452,6 @@ static int exynos_enter_core0_aftr(struct cpuidle_device *dev,
 	tmp &= ~EXYNOS_CENTRAL_LOWPWR_CFG;
 	__raw_writel(tmp, EXYNOS_CENTRAL_SEQ_CONFIGURATION);
 
-	set_boot_flag(cpuid, C2_STATE);
-
 	cpu_pm_enter();
 
 	ret = cpu_suspend(0, idle_finisher);
@@ -462,8 +460,6 @@ static int exynos_enter_core0_aftr(struct cpuidle_device *dev,
 		tmp |= EXYNOS_CENTRAL_LOWPWR_CFG;
 		__raw_writel(tmp, EXYNOS_CENTRAL_SEQ_CONFIGURATION);
 	}
-
-	clear_boot_flag(cpuid, C2_STATE);
 
 	cpu_pm_exit();
 
@@ -570,8 +566,6 @@ static int exynos_enter_core0_lpa(struct cpuidle_device *dev,
 		/* Waiting for flushing UART fifo */
 	} while (exynos_uart_fifo_check());
 
-	set_boot_flag(cpuid, C2_STATE);
-
 	if (soc_is_exynos5420()) {
 		tmp = __raw_readl(EXYNOS5420_SFR_AXI_CGDIS1_REG);
 		tmp |= (EXYNOS5420_UFS | EXYNOS5420_ACE_KFC | EXYNOS5420_ACE_EAGLE);
@@ -628,8 +622,6 @@ early_wakeup:
 
 		exynos5_mif_nocp_resume();
 	}
-
-	clear_boot_flag(cpuid, C2_STATE);
 
 	cpu_pm_exit();
 
@@ -784,8 +776,6 @@ static int exynos_enter_c2(struct cpuidle_device *dev,
 	__raw_writel(virt_to_phys(s3c_cpu_resume), REG_DIRECTGO_ADDR);
 	__raw_writel(EXYNOS_CHECK_DIRECTGO, REG_DIRECTGO_FLAG);
 
-	set_boot_flag(cpuid, C2_STATE);
-	sec_debug_task_log_msg(cpuid, "c2+");
 	cpu_pm_enter();
 
 	if (soc_is_exynos5410()) {
@@ -822,11 +812,6 @@ static int exynos_enter_c2(struct cpuidle_device *dev,
 	value |= (0x1 << cpu_offset);
 	__raw_writel(value, EXYNOS5410_ARM_INTR_SPREAD_ENABLE);
 
-	clear_boot_flag(cpuid, C2_STATE);
-	if (ret)
-		sec_debug_task_log_msg(cpuid, "c2_");    /* early wakeup */
-	else
-		sec_debug_task_log_msg(cpuid, "c2-");    /* normal wakeup */
 	cpu_pm_exit();
 
 	do_gettimeofday(&after);

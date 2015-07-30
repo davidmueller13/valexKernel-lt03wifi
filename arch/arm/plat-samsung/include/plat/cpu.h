@@ -188,9 +188,6 @@ IS_SAMSUNG_CPU(exynos5420, EXYNOS5420_SOC_ID, EXYNOS5_SOC_MASK)
 
 #define BOOT_MODE_MASK	0x1f
 
-extern void set_boot_flag(unsigned int cpu, unsigned int mode);
-extern void clear_boot_flag(unsigned int cpu, unsigned int mode);
-
 /* check & clear state of GICD_IGROUP0 */
 extern unsigned int read_gic_flag(unsigned int cpu);
 extern void clear_gic_flag(unsigned int cpu);

@@ -75,10 +75,6 @@ static void exynos_secondary_init(unsigned int cpu)
 	 */
 	write_pen_release(-1);
 
-#ifdef CONFIG_ARM_TRUSTZONE
-	clear_boot_flag(cpu, HOTPLUG);
-#endif
-
 	/*
 	 * Synchronise with the boot thread.
 	 */
