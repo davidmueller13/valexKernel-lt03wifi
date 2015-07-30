@@ -410,13 +410,6 @@ config EXYNOS5_DEV_BTS
 	help
 	  Compile in platform device definitions for BTS devices
 
-config EXYNOS5_CCI
-	bool "Cache Coherent Interconnect support"
-	depends on ARCH_EXYNOS5
-	default n
-	help
-	  Enable Cache Coherent Interconnect support
-
 config EXYNOS5420_BTS
 	bool "Bus traffic shaper support"
 	default y
