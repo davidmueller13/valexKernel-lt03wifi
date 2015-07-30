@@ -18,10 +18,9 @@ obj-$(CONFIG_ARM_TRUSTZONE)	+= irq-sgi.o
 obj-$(CONFIG_CPU_EXYNOS4210)	+= clock-exynos4210.o
 obj-$(CONFIG_SOC_EXYNOS4212)	+= clock-exynos4212.o
 obj-$(CONFIG_SOC_EXYNOS5250)	+= clock-exynos5250.o
-obj-$(CONFIG_SOC_EXYNOS5410)	+= clock-exynos5410.o asv-exynos.o asv-exynos5410.o cci.o exynos-power-mode.o
-obj-$(CONFIG_SOC_EXYNOS5420)	+= clock-exynos5420.o asv-exynos.o asv-exynos5420.o cci.o
+obj-$(CONFIG_SOC_EXYNOS5410)	+= clock-exynos5410.o asv-exynos.o asv-exynos5410.o exynos-power-mode.o
+obj-$(CONFIG_SOC_EXYNOS5420)	+= clock-exynos5420.o asv-exynos.o asv-exynos5420.o
 obj-$(CONFIG_SOC_EXYNOS5410)	+= exynos-interface.o
-obj-$(CONFIG_BL_SWITCHER)	+= sys-if-switcher.o
 
 obj-$(CONFIG_EXYNOS5_DEV_BTS)		+= dev-bts.o
 obj-$(CONFIG_EXYNOS5410_BTS)		+= bts-exynos5410.o
@@ -280,8 +279,6 @@ obj-$(CONFIG_CMA)			+= reserve-mem.o
 obj-$(CONFIG_EXYNOS5_SETUP_JPEG)			+= setup-jpeg.o
 obj-$(CONFIG_ARCH_EXYNOS5)		+= resetreason.o
 obj-$(CONFIG_EXYNOS_TMU)		+= tmu-exynos.o
-
-obj-$(CONFIG_BL_SWITCHER)		+= bL_control.o bL_setup.o
 
 obj-$(CONFIG_MACH_UNIVERSAL5420)	+= sec-reboot.o
 obj-$(CONFIG_SEC_DEBUG)			+= sec_debug.o sec_getlog.o sec_gaf.o
