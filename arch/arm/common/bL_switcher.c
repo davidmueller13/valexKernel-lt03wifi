@@ -33,6 +33,7 @@
 #include <linux/sysfs.h>
 #include <linux/moduleparam.h>
 #include <linux/of.h>
+#include <linux/irqchip/arm-gic.h>
 
 #include <asm/smp_plat.h>
 #include <asm/cacheflush.h>
@@ -40,7 +41,6 @@
 #include <asm/suspend.h>
 #include <asm/mcpm.h>
 #include <asm/bL_switcher.h>
-#include <asm/hardware/gic.h>
 
 #define CREATE_TRACE_POINTS
 #include <trace/events/power_cpu_migrate.h>
