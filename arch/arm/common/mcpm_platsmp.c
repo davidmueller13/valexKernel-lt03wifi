@@ -18,7 +18,6 @@
 #include <asm/mcpm.h>
 #include <asm/smp.h>
 #include <asm/smp_plat.h>
-#include <asm/hardware/gic.h>
 
 static void __init simple_smp_init_cpus(void)
 {
@@ -48,7 +47,6 @@ static int __cpuinit mcpm_boot_secondary(unsigned int cpu, struct task_struct *i
 static void __cpuinit mcpm_secondary_init(unsigned int cpu)
 {
 	mcpm_cpu_powered_up(false);
-	gic_secondary_init(0);
 }
 
 #ifdef CONFIG_HOTPLUG_CPU
