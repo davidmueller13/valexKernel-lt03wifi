@@ -669,3 +669,5 @@ do {									\
 
 #define RANDOM32	prandom_u32
 #define SRANDOM32(entropy)	prandom_seed(entropy)
+
+#endif
