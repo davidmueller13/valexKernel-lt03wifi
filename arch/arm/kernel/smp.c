@@ -45,7 +45,6 @@
 #include <asm/smp_plat.h>
 #include <asm/mach/arch.h>
 #include <asm/mpu.h>
-#include <mach/sec_debug.h>
 
 /*
  * as from 2.5, kernels no longer have an init_tasks structure
@@ -563,8 +562,6 @@ static void ipi_cpu_stop(unsigned int cpu, struct pt_regs *regs)
 	flush_cache_all();
 	local_flush_tlb_all();
 
-	sec_debug_save_context();
-
 	while (1)
 		cpu_relax();
 }
@@ -650,8 +647,6 @@ void handle_IPI(int ipinr, struct pt_regs *regs)
 	if (ipinr < NR_IPI)
 		__inc_irq_stat(cpu, ipi_irqs[ipinr]);
 
-	sec_debug_irq_log(ipinr, do_IPI, 1);
-
 	switch (ipinr) {
 	case IPI_WAKEUP:
 		break;
@@ -701,8 +696,6 @@ void handle_IPI(int ipinr, struct pt_regs *regs)
 		       cpu, ipinr);
 		break;
 	}
-
-	sec_debug_irq_log(ipinr, do_IPI, 2);
 
 	set_irq_regs(old_regs);
 }
