@@ -1387,14 +1387,10 @@ u32 ip_idents_reserve(u32 hash, int segs)
 	u32 now = (u32)jiffies;
 	u32 delta = 0;
 
-	if (old != now && cmpxchg(&bucket->stamp32, old, now) == old) {
-		u64 x = random32();
+        if (old != now && cmpxchg(&bucket->stamp32, old, now) == old)
+                delta = prandom_u32_max(now - old);
 
-		x *= (now - old);
-		delta = (u32)(x >> 32);
-	}
-
-	return atomic_add_return(segs + delta, &bucket->id) - segs;
+        return atomic_add_return(segs + delta, &bucket->id) - segs;
 }
 EXPORT_SYMBOL(ip_idents_reserve);
 
@@ -3531,7 +3527,7 @@ int __init ip_rt_init(void)
 	INIT_DELAYED_WORK_DEFERRABLE(&expires_work, rt_worker_func);
 	expires_ljiffies = jiffies;
 	schedule_delayed_work(&expires_work,
-		net_random() % ip_rt_gc_interval + ip_rt_gc_interval);
+		prandom_u32() % ip_rt_gc_interval + ip_rt_gc_interval);
 
 	if (ip_rt_proc_init())
 		pr_err("Unable to create route proc files\n");
