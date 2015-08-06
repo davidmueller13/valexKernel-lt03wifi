@@ -73,6 +73,12 @@ config IOSCHED_FIOPS
           IOPS equally among all processes in the system. It's mainly for
           Flash based storage.
 
+config IOSCHED_FIFO
+	bool
+	default y
+	---help---
+	 A no-op scheduler that really does nothing.
+
 choice
 	prompt "Default I/O scheduler"
 	default DEFAULT_CFQ
@@ -99,6 +105,9 @@ choice
 	config DEFAULT_FIOPS
 		bool "FIOPS" if IOSCHED_FIOPS=y
 
+	config DEFAULT_FIFO
+		bool "FIFO" if IOSCHED_FIFO=y
+
 	config DEFAULT_NOOP
 		bool "No-op"
 
@@ -110,6 +119,7 @@ config DEFAULT_IOSCHED
 	default "cfq" if DEFAULT_CFQ
 	default "bfq" if DEFAULT_BFQ
 	default "fiops" if DEFAULT_FIOPS
+	default "fifo" if DEFAULT_FIFO
 	default "noop" if DEFAULT_NOOP
 
 endmenu
