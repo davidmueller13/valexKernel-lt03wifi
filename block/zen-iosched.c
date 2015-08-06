@@ -18,7 +18,7 @@ enum zen_data_dir { ASYNC, SYNC };
 
 static const int sync_expire  = HZ / 4;    /* max time before a sync is submitted. */
 static const int async_expire = 2 * HZ;    /* ditto for async, these limits are SOFT! */
-static const int fifo_batch = 8;
+static const int fifo_batch = 1;
 
 struct zen_data {
 	/* Runtime Data */
@@ -40,7 +40,7 @@ zen_get_data(struct request_queue *q) {
 static void zen_dispatch(struct zen_data *, struct request *);
 
 static void
-zen_merged_requests(struct request_queue *q, struct request *rq,
+zen_merged_requests(struct request_queue *q, struct request *req,
                     struct request *next)
 {
 	/*
@@ -53,7 +53,7 @@ zen_merged_requests(struct request_queue *q, struct request *rq,
 			rq_set_fifo_time(req, rq_fifo_time(next));
 	}
 
-	/* Delete next request */
+	/* next request is gone */
 	rq_fifo_clear(next);
 }
 
