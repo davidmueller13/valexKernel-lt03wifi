@@ -4,7 +4,6 @@
 #include <linux/ioport.h>
 
 #include <asm/errno.h>
-#include <linux/clocksource.h>
 
 struct arch_timer {
 	struct resource	res[2];
@@ -15,7 +14,6 @@ struct arch_timer {
 int arch_timer_register(struct arch_timer *);
 int arch_timer_sched_clock_init(void);
 int arch_timer_of_register(void);
-struct timecounter *arch_timer_get_timecounter(void);
 #else
 static inline int arch_timer_register(struct arch_timer *at)
 {
@@ -30,11 +28,6 @@ static inline int arch_timer_of_register(void)
 static inline int arch_timer_sched_clock_init(void)
 {
 	return -ENXIO;
-}
-
-static inline struct timecounter *arch_timer_get_timecounter(void)
-{
-	return NULL;
 }
 #endif
 
