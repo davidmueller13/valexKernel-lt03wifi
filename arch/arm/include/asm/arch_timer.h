@@ -10,14 +10,8 @@ struct arch_timer {
 #ifdef CONFIG_ARM_ARCH_TIMER
 int arch_timer_register(struct arch_timer *);
 int arch_timer_sched_clock_init(void);
-int arch_timer_of_register(void);
 #else
 static inline int arch_timer_register(struct arch_timer *at)
-{
-	return -ENXIO;
-}
-
-static inline int arch_timer_of_register(void)
 {
 	return -ENXIO;
 }
