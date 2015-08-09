@@ -85,3 +85,6 @@ GTAGS
 *.rej
 *~
 \#*#
+
+scripts/kconfig/qconf
+scripts/kconfig/qconf.moc
