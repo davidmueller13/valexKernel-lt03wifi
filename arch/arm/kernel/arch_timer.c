@@ -441,7 +441,6 @@ int __init arch_timer_common_register(void)
 	if (err)
 		goto out_free_irq;
 
-	init_current_timer_delay(arch_timer_rate);
 	/* Use the architected timer for the delay loop. */
 	arch_delay_timer.read_current_timer = &arch_timer_read_current_timer;
 	arch_delay_timer.freq = arch_timer_rate;
