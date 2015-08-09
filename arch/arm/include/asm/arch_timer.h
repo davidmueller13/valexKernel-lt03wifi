@@ -11,7 +11,6 @@ struct arch_timer {
 };
 
 #ifdef CONFIG_ARM_ARCH_TIMER
-#define ARCH_HAS_READ_CURRENT_TIMER
 int arch_timer_register(struct arch_timer *);
 int arch_timer_sched_clock_init(void);
 struct timecounter *arch_timer_get_timecounter(void);
