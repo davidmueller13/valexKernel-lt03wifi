@@ -333,15 +333,6 @@ int read_current_timer(unsigned long *timer_val)
 	return 0;
 }
 
-static cycle_t arch_counter_read_cc(const struct cyclecounter *cc)
-{
-	/*
-	 * Always use the physical counter for the clocksource.
-	 * CNTHCTL.PL1PCTEN must be set to 1.
-	 */
-	return arch_counter_get_cntpct();
-}
-
 static struct clocksource clocksource_counter = {
 	.name	= "arch_sys_counter",
 	.rating	= 400,
@@ -350,19 +341,7 @@ static struct clocksource clocksource_counter = {
 	.flags	= CLOCK_SOURCE_IS_CONTINUOUS,
 };
 
-static struct cyclecounter cyclecounter = {
-	.read	= arch_counter_read_cc,
-	.mask	= CLOCKSOURCE_MASK(56),
-};
-
-static struct timecounter timecounter;
-
-struct timecounter *arch_timer_get_timecounter(void)
-{
-	return &timecounter;
-}
-
-static void arch_timer_stop(struct clock_event_device *clk)
+static void __cpuinit arch_timer_stop(struct clock_event_device *clk)
 {
 	pr_debug("arch_timer_teardown disable IRQ%d cpu #%d\n",
 		 clk->irq, smp_processor_id());
@@ -401,10 +380,6 @@ static int __init arch_timer_common_register(void)
 	}
 
 	clocksource_register_hz(&clocksource_counter, arch_timer_rate);
-	cyclecounter.mult = clocksource_counter.mult;
-	cyclecounter.shift = clocksource_counter.shift;
-	timecounter_init(&timecounter, &cyclecounter,
-			 arch_counter_get_cntpct());
 
 	if (arch_timer_use_virtual) {
 		ppi = arch_timer_ppi[VIRT_PPI];
