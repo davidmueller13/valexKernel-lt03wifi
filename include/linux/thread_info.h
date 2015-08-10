@@ -8,6 +8,7 @@
 #define _LINUX_THREAD_INFO_H
 
 #include <linux/types.h>
+#include <linux/bug.h>
 
 struct timespec;
 struct compat_timespec;

@@ -63,13 +63,13 @@ retry_get_time:
 }
 
 /**
- * read_persistent_clock() -  Return time from a persistent clock.
+ * exynos_read_persistent_clock() -  Return time from a persistent clock.
  * @ts:		timespec returns a relative timestamp, not a wall time
  *
  * Reads a clock that keeps relative time across suspend/resume on Exynos
  * platforms.  The clock is accurate to 1 second.
  */
-void read_persistent_clock(struct timespec *ts)
+void exynos_read_persistent_clock(struct timespec *ts)
 {
 	struct rtc_time rtc_tm;
 	unsigned long time;

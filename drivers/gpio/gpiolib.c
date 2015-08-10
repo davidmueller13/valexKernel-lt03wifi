@@ -1158,7 +1158,7 @@ EXPORT_SYMBOL_GPL(gpiochip_remove);
  */
 struct gpio_chip *gpiochip_find(const void *data,
 				int (*match)(struct gpio_chip *chip,
-					     void *data))
+					     const void *data))
 {
 	struct gpio_chip *chip = NULL;
 	unsigned long flags;
