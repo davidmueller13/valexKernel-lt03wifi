@@ -2192,7 +2192,7 @@ err_out:
 	return -1;
 }
 
-static void __ntfs_clear_inode(ntfs_inode *ni)
+static void __ntfs_end_writeback(ntfs_inode *ni)
 {
 	/* Free all alocated memory. */
 	down_write(&ni->runlist.lock);
@@ -2237,7 +2237,7 @@ void ntfs_clear_extent_inode(ntfs_inode *ni)
 	}
 #endif /* NTFS_RW */
 
-	__ntfs_clear_inode(ni);
+	__ntfs_end_writeback(ni);
 
 	/* Bye, bye... */
 	ntfs_destroy_extent_inode(ni);
@@ -2258,7 +2258,7 @@ void ntfs_evict_big_inode(struct inode *vi)
 	ntfs_inode *ni = NTFS_I(vi);
 
 	truncate_inode_pages(&vi->i_data, 0);
-	clear_inode(vi);
+	end_writeback(vi);
 
 #ifdef NTFS_RW
 	if (NInoDirty(ni)) {
@@ -2284,7 +2284,7 @@ void ntfs_evict_big_inode(struct inode *vi)
 		kfree(ni->ext.extent_ntfs_inos);
 	}
 
-	__ntfs_clear_inode(ni);
+	__ntfs_end_writeback(ni);
 
 	if (NInoAttr(ni)) {
 		/* Release the base inode if we are holding it. */
