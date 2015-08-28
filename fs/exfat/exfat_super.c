@@ -1754,10 +1754,10 @@ static int exfat_write_inode(struct inode *inode, struct writeback_control *wbc)
 static void exfat_delete_inode(struct inode *inode)
 {
 	truncate_inode_pages(&inode->i_data, 0);
-	clear_inode(inode);
+	end_writeback(inode);
 }
 
-static void exfat_clear_inode(struct inode *inode)
+static void exfat_end_writeback(struct inode *inode)
 {
 	exfat_detach(inode);
 	remove_inode_hash(inode);
@@ -1771,7 +1771,7 @@ static void exfat_evict_inode(struct inode *inode)
 		i_size_write(inode, 0);
 	invalidate_inode_buffers(inode);
 
-	clear_inode(inode);
+	end_writeback(inode);
 
 	exfat_detach(inode);
 
@@ -1920,7 +1920,7 @@ const struct super_operations exfat_sops = {
 	.write_inode   = exfat_write_inode,
 #if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,36)
 	.delete_inode  = exfat_delete_inode,
-	.clear_inode   = exfat_clear_inode,
+	.end_writeback   = exfat_end_writeback,
 #else
 	.evict_inode  = exfat_evict_inode,
 #endif
