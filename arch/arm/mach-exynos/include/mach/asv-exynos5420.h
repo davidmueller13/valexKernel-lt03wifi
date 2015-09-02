@@ -13,6 +13,8 @@
 #ifndef __ASM_ARCH_EXYNOS5420_ASV_H
 #define __ASM_ARCH_EXYNOS5420_ASV_H __FILE__
 
+#include <mach/asv-exynos.h>
+
 #define ARM_DVFS_LEVEL_NR		(18)
 #define ARM_ASV_GRP_NR			(15)
 #define ARM_MAX_VOLT			(1362500)
@@ -156,5 +158,10 @@ static unsigned int mif_sram_asv_volt_info_evt1[1][MIF_ASV_GRP_NR] = {
 static unsigned int g3d_sram_asv_volt_info_evt1[1][G3D_ASV_GRP_NR] = {
 	{         1025000, 1000000, 1000000,  975000,  975000,  975000,  950000,  950000,  925000,  925000,  900000,  900000,  900000,  900000,  900000},
 };
+
+extern unsigned int exynos_result_of_asv;
+extern unsigned int exynos_result_mif_asv;
+extern bool exynos_lot_id;
+extern bool exynos_lot_is_nzvpu;
 
 #endif /* EXYNOS5420_ASV_H */

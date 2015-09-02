@@ -1178,7 +1178,7 @@ static __devinit int exynos5_busfreq_mif_probe(struct platform_device *pdev)
 
 #if defined(CONFIG_DEVFREQ_GOV_SIMPLE_USAGE)
 	data->devfreq = devfreq_add_device(dev, &exynos5_mif_devfreq_profile,
-					   &devfreq_simple_usage, &exynos5_mif_governor_data);
+					   "simple_usage", &exynos5_mif_governor_data);
 #endif
 #if defined(CONFIG_DEVFREQ_GOV_USERSPACE)
 	data->devfreq = devfreq_add_device(dev, &exynos5_mif_devfreq_profile, &devfreq_userspace, NULL);

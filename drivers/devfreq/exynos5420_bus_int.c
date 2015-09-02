@@ -1136,7 +1136,7 @@ static __devinit int exynos5_busfreq_int_probe(struct platform_device *pdev)
 #endif
 #if defined(CONFIG_DEVFREQ_GOV_SIMPLE_ONDEMAND)
 	data->devfreq = devfreq_add_device(dev, &exynos5_int_devfreq_profile,
-					   &devfreq_simple_ondemand, &exynos5_int_governor_data);
+					   "simple_ondemand", &exynos5_int_governor_data);
 #endif
 	if (IS_ERR(data->devfreq)) {
 		err = PTR_ERR(data->devfreq);

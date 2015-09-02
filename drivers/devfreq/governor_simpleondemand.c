@@ -13,7 +13,6 @@
 #include <linux/module.h>
 #include <linux/devfreq.h>
 #include <linux/math64.h>
-<<<<<<< HEAD
 #include <linux/pm_qos.h>
 #include <linux/list.h>
 #include <linux/mutex.h>
@@ -46,9 +45,6 @@ static int devfreq_simple_ondemand_notifier(struct notifier_block *nb, unsigned 
 
 	return NOTIFY_OK;
 }
-=======
-#include "governor.h"
->>>>>>> bf58cdf... Merge branch 'pm-devfreq'
 
 /* Default constants for DevFreq-Simple-Ondemand (DFSO) */
 #define DFSO_UPTHRESHOLD	(90)
@@ -143,7 +139,6 @@ static int devfreq_simple_ondemand_func(struct devfreq *df,
 	return 0;
 }
 
-<<<<<<< HEAD
 static int devfreq_simple_ondemand_init(struct devfreq *df)
 {
 	int ret;
@@ -176,8 +171,6 @@ err:
 	return ret;
 }
 
-=======
->>>>>>> bf58cdf... Merge branch 'pm-devfreq'
 static int devfreq_simple_ondemand_handler(struct devfreq *devfreq,
 				unsigned int event, void *data)
 {
@@ -213,17 +206,7 @@ static struct devfreq_governor devfreq_simple_ondemand = {
 	.name = "simple_ondemand",
 	.get_target_freq = devfreq_simple_ondemand_func,
 	.event_handler = devfreq_simple_ondemand_handler,
-<<<<<<< HEAD
-	.init = devfreq_simple_ondemand_init,
-=======
->>>>>>> bf58cdf... Merge branch 'pm-devfreq'
 };
-
-static int __init devfreq_simple_ondemand_init(void)
-{
-	return devfreq_add_governor(&devfreq_simple_ondemand);
-}
-subsys_initcall(devfreq_simple_ondemand_init);
 
 static void __exit devfreq_simple_ondemand_exit(void)
 {

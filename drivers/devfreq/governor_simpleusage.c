@@ -168,6 +168,4 @@ out:
 const struct devfreq_governor devfreq_simple_usage = {
 	.name = "simple_usage",
 	.get_target_freq = devfreq_simple_usage_func,
-	.init = devfreq_simple_usage_init,
-	.exit = devfreq_simple_usage_exit,
 };

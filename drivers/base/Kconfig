@@ -281,6 +281,19 @@ config CMA_AREAS
 
 endif
 
+config DMA_SHARED_BUFFER_USES_KDS
+	bool "Synchronize access to dma_buf with KDS"
+	default n
+	select KDS
+	depends on DMA_SHARED_BUFFER
+	help
+	  This option adds a KDS resource within every dma_buf allocation.
+
+config KDS
+	bool "Kernel dependency system"
+	help
+	  This option enables the generic kernel dependency system
+
 config SYNC
 	bool "Synchronization framework"
 	default n
