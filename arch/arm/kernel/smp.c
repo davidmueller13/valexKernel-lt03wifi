@@ -474,7 +474,7 @@ u64 smp_irq_stat_cpu(unsigned int cpu)
 static DEFINE_PER_CPU(struct clock_event_device, percpu_clockevent);
 
 #ifdef CONFIG_GENERIC_CLOCKEVENTS_BROADCAST
-void tick_broadcast(const struct cpumask *mask)
+static void tick_broadcast(const struct cpumask *mask)
 {
 	smp_cross_call(mask, IPI_TIMER);
 }
