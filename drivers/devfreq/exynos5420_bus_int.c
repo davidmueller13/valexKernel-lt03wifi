@@ -469,6 +469,8 @@ static void exynos5_int_update_state(unsigned int target_freq)
 	int_pre_time = cur_time;
 }
 
+unsigned long curr_int_freq;
+
 static int exynos5_int_busfreq_target(struct device *dev,
 				      unsigned long *_freq, u32 flags)
 {
@@ -523,6 +525,7 @@ static int exynos5_int_busfreq_target(struct device *dev,
 				target_volt, target_volt + INT_VOLT_STEP_UV);
 	}
 
+	curr_int_freq = freq;
 	data->curr_opp = opp;
 out:
 	mutex_unlock(&data->lock);
