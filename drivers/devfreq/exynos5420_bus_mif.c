@@ -28,9 +28,12 @@
 
 #include <mach/regs-clock.h>
 #include <mach/regs-pmu.h>
+#include <mach/regs-mem.h>
 #include <mach/devfreq.h>
 #include <mach/regs-mem.h>
 #include <mach/asv-exynos.h>
+#include <mach/smc.h>
+#include <mach/tmu.h>
 
 #include <plat/pll.h>
 #include "exynos5420_noc_probe.h"
@@ -63,6 +66,7 @@ static unsigned int num_fimd1_layers = 0;
 static struct pm_qos_request exynos5_mif_qos;
 static struct pm_qos_request boot_mif_qos;
 static struct pm_qos_request media_mif_qos;
+static struct pm_qos_request min_mif_thermal_qos;
 cputime64_t mif_pre_time;
 
 static struct pm_qos_request exynos5_int_qos;
