@@ -55,6 +55,9 @@ static bool en_profile = false;
 #define SET_1			1
 
 static bool mif_transition_disabled;
+static unsigned int enabled_fimc_lite = 0;
+static unsigned int num_mixer_layers = 0;
+static unsigned int num_fimd1_layers = 0;
 
 static struct pm_qos_request exynos5_mif_qos;
 static struct pm_qos_request boot_mif_qos;
@@ -238,6 +241,131 @@ void exynos5_mif_transition_disable(bool disable)
 	mif_transition_disabled = disable;
 }
 EXPORT_SYMBOL_GPL(mif_transition_disabled);
+
+void exynos5_update_media_layers(enum devfreq_media_type media_type, unsigned int value)
+{
+	unsigned int num_total_layers;
+	unsigned long media_qos_freq = 0;
+
+	mutex_lock(&media_mutex);
+
+	if (media_type == TYPE_FIMC_LITE)
+		enabled_fimc_lite = value;
+	else if (media_type == TYPE_MIXER)
+		num_mixer_layers = value;
+	else if (media_type == TYPE_FIMD1)
+		num_fimd1_layers = value;
+
+	num_total_layers = num_mixer_layers + num_fimd1_layers;
+
+	pr_debug("%s: fimc_lite = %s, num_mixer_layers = %u, num_fimd1_layers = %u, "
+			"num_total_layers = %u\n", __func__,
+			enabled_fimc_lite ? "enabled" : "disabled",
+			num_mixer_layers, num_fimd1_layers, num_total_layers);
+
+#if !defined(CONFIG_SUPPORT_WQXGA)
+	if (!enabled_fimc_lite && num_mixer_layers) {
+		media_qos_freq = mif_bus_opp_list[LV_4].clk;
+		goto out;
+	}
+#endif
+
+	switch (num_total_layers) {
+#if defined(CONFIG_SUPPORT_WQXGA)
+	case NUM_LAYERS_5:
+		if (enabled_fimc_lite)
+			media_qos_freq = mif_bus_opp_list[LV_0].clk;
+		else
+			media_qos_freq = mif_bus_opp_list[LV_1].clk;
+		break;
+	case NUM_LAYERS_4:
+		if (enabled_fimc_lite) {
+			if (num_fimd1_layers == NUM_LAYERS_3)
+				media_qos_freq = mif_bus_opp_list[LV_1].clk;
+			else
+				media_qos_freq = mif_bus_opp_list[LV_2].clk;
+		} else {
+			media_qos_freq = mif_bus_opp_list[LV_3].clk;
+		}
+		break;
+	case NUM_LAYERS_3:
+		if (enabled_fimc_lite) {
+			if (num_fimd1_layers == NUM_LAYERS_3)
+				media_qos_freq = mif_bus_opp_list[LV_2].clk;
+			else
+				media_qos_freq = mif_bus_opp_list[LV_3].clk;
+		} else {
+			if (num_fimd1_layers == NUM_LAYERS_3)
+				media_qos_freq = mif_bus_opp_list[LV_3].clk;
+			else
+				media_qos_freq = mif_bus_opp_list[LV_4].clk;
+		}
+		break;
+	case NUM_LAYERS_2:
+		if (enabled_fimc_lite) {
+			media_qos_freq = mif_bus_opp_list[LV_3].clk;
+		} else {
+			if (num_fimd1_layers == NUM_LAYERS_2)
+				media_qos_freq = mif_bus_opp_list[LV_5].clk;
+			else
+				media_qos_freq = mif_bus_opp_list[LV_4].clk;
+		}
+		break;
+	case NUM_LAYERS_1:
+	case NUM_LAYERS_0:
+		if (enabled_fimc_lite)
+			media_qos_freq = mif_bus_opp_list[LV_3].clk;
+		else
+			media_qos_freq = mif_bus_opp_list[LV_7].clk;
+		break;
+#else
+	case NUM_LAYERS_6:
+		if (enabled_fimc_lite)
+			media_qos_freq = mif_bus_opp_list[LV_0].clk;
+		break;
+	case NUM_LAYERS_5:
+		if (enabled_fimc_lite)
+			media_qos_freq = mif_bus_opp_list[LV_2].clk;
+		break;
+	case NUM_LAYERS_4:
+		if (enabled_fimc_lite)
+			media_qos_freq = mif_bus_opp_list[LV_2].clk;
+		else
+			media_qos_freq = mif_bus_opp_list[LV_4].clk;
+		break;
+	case NUM_LAYERS_3:
+		if (enabled_fimc_lite)
+			media_qos_freq = mif_bus_opp_list[LV_3].clk;
+		else
+			media_qos_freq = mif_bus_opp_list[LV_5].clk;
+		break;
+	case NUM_LAYERS_2:
+		if (enabled_fimc_lite)
+			media_qos_freq = mif_bus_opp_list[LV_3].clk;
+		else
+			media_qos_freq = mif_bus_opp_list[LV_7].clk;
+		break;
+	case NUM_LAYERS_1:
+	case NUM_LAYERS_0:
+		if (enabled_fimc_lite) {
+			if (num_mixer_layers == NUM_LAYERS_0 && num_fimd1_layers < NUM_LAYERS_2)
+				media_qos_freq = mif_bus_opp_list[LV_4].clk;
+			else
+				media_qos_freq = mif_bus_opp_list[LV_3].clk;
+		} else {
+			media_qos_freq = mif_bus_opp_list[LV_8].clk;
+		}
+		break;
+#endif
+	}
+
+out:
+	if (pm_qos_request_active(&media_mif_qos))
+		pm_qos_update_request(&media_mif_qos, media_qos_freq);
+
+	mutex_unlock(&media_mutex);
+}
+EXPORT_SYMBOL_GPL(exynos5_update_media_layers);
 
 static void exynos5_set_dmc_timing(int target_idx)
 {
