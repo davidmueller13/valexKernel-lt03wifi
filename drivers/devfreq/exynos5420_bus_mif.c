@@ -54,6 +54,7 @@ static bool en_profile = false;
 #define SET_0			0
 #define SET_1			1
 
+bool mif_is_probed;
 static bool mif_transition_disabled;
 static unsigned int enabled_fimc_lite = 0;
 static unsigned int num_mixer_layers = 0;
@@ -367,6 +368,22 @@ out:
 }
 EXPORT_SYMBOL_GPL(exynos5_update_media_layers);
 
+#ifdef CONFIG_EXYNOS_THERMAL
+static unsigned int get_limit_voltage(unsigned int voltage, unsigned int volt_offset)
+{
+	if (voltage > LIMIT_COLD_VOLTAGE)
+		return voltage;
+
+	if (voltage + volt_offset > LIMIT_COLD_VOLTAGE)
+		return LIMIT_COLD_VOLTAGE;
+
+	if (volt_offset && (voltage + volt_offset < MIN_COLD_VOLTAGE))
+		return MIN_COLD_VOLTAGE;
+
+	return voltage + volt_offset;
+}
+#endif
+
 static void exynos5_set_dmc_timing(int target_idx)
 {
 	unsigned int set_timing_row, set_timing_data, set_timing_power;
@@ -605,6 +622,11 @@ static int exynos5_mif_busfreq_target(struct device *dev,
 
 	info.old = old_freq;
 	info.new = freq;
+
+#ifdef CONFIG_EXYNOS_THERMAL
+	if (data->volt_offset)
+		target_volt = get_limit_voltage(target_volt, data->volt_offset);
+#endif
 
 	/*
 	 * If target freq is higher than old freq
@@ -945,6 +967,109 @@ static struct notifier_block exynos5_mif_reboot_notifier = {
 	.notifier_call = exynos5_mif_reboot_notifier_call,
 };
 
+#ifdef CONFIG_EXYNOS_THERMAL
+static int exynos5_bus_mif_tmu_notifier(struct notifier_block *notifier,
+						unsigned long event, void *v)
+{
+	struct busfreq_data_mif *data = container_of(notifier, struct busfreq_data_mif,
+								tmu_notifier);
+	struct exynos_devfreq_platdata *pdata = data->dev->platform_data;
+	unsigned int prev_volt, set_volt;
+	unsigned int *on = v;
+
+	if (event == TMU_COLD) {
+		if (pm_qos_request_active(&exynos5_mif_qos))
+			pm_qos_update_request(&exynos5_mif_qos,
+					exynos5_mif_devfreq_profile.initial_freq);
+
+		if (*on) {
+			mutex_lock(&data->lock);
+
+			prev_volt = regulator_get_voltage(data->vdd_mif);
+
+			if (data->volt_offset != COLD_VOLT_OFFSET) {
+				data->volt_offset = COLD_VOLT_OFFSET;
+			} else {
+				mutex_unlock(&data->lock);
+				return NOTIFY_OK;
+			}
+
+			/* setting voltage for MIF about cold temperature */
+			set_volt = get_limit_voltage(prev_volt, data->volt_offset);
+			regulator_set_voltage(data->vdd_mif, set_volt, set_volt + MIF_VOLT_STEP);
+
+			mutex_unlock(&data->lock);
+		} else {
+			mutex_lock(&data->lock);
+
+			prev_volt = regulator_get_voltage(data->vdd_mif);
+
+			if (data->volt_offset != 0) {
+				data->volt_offset = 0;
+			} else {
+				mutex_unlock(&data->lock);
+				return NOTIFY_OK;
+			}
+
+			/* restore voltage for MIF */
+			set_volt = get_limit_voltage(prev_volt - COLD_VOLT_OFFSET, data->volt_offset);
+			regulator_set_voltage(data->vdd_mif, set_volt, set_volt + MIF_VOLT_STEP);
+
+			mutex_unlock(&data->lock);
+		}
+
+		if (pm_qos_request_active(&exynos5_mif_qos))
+			pm_qos_update_request(&exynos5_mif_qos, pdata->default_qos);
+	}
+
+	switch (event) {
+	case MEM_TH_LV1:
+		__raw_writel(AREF_NORMAL, EXYNOS5_DREXI_0_TIMINGAREF);
+		__raw_writel(AREF_NORMAL, EXYNOS5_DREXI_1_TIMINGAREF);
+
+		if (pm_qos_request_active(&min_mif_thermal_qos))
+			pm_qos_update_request(&min_mif_thermal_qos, pdata->default_qos);
+
+		break;
+	case MEM_TH_LV2:
+		/*
+		 * In case of temperature increment, set MIF level 266Mhz as minimum
+		 * before changing dram refresh counter.
+		 */
+		if (*on < MEM_TH_LV2) {
+			if (pm_qos_request_active(&min_mif_thermal_qos))
+				pm_qos_update_request(&min_mif_thermal_qos,
+							mif_bus_opp_list[LV_5].clk);
+		}
+
+		__raw_writel(AREF_HOT, EXYNOS5_DREXI_0_TIMINGAREF);
+		__raw_writel(AREF_HOT, EXYNOS5_DREXI_1_TIMINGAREF);
+
+		/*
+		 * In case of temperature decrement, set MIF level 266Mhz as minimum
+		 * after changing dram refresh counter.
+		 */
+		if (*on > MEM_TH_LV2) {
+			if (pm_qos_request_active(&min_mif_thermal_qos))
+				pm_qos_update_request(&min_mif_thermal_qos,
+							mif_bus_opp_list[LV_5].clk);
+		}
+
+		break;
+	case MEM_TH_LV3:
+		if (pm_qos_request_active(&min_mif_thermal_qos))
+			pm_qos_update_request(&min_mif_thermal_qos, mif_bus_opp_list[LV_4].clk);
+
+		__raw_writel(AREF_CRITICAL, EXYNOS5_DREXI_0_TIMINGAREF);
+		__raw_writel(AREF_CRITICAL, EXYNOS5_DREXI_1_TIMINGAREF);
+
+		break;
+	}
+
+	return NOTIFY_OK;
+}
+#endif
+
 static int exynos5_devfreq_probe(struct platform_device *pdev)
 {
 	struct busfreq_data_mif *data;
@@ -1067,6 +1192,9 @@ static int exynos5_devfreq_probe(struct platform_device *pdev)
 	data->bp_enabled = false;
 	data->changed_timeout = false;
 
+#ifdef CONFIG_EXYNOS_THERMAL
+	data->tmu_notifier.notifier_call = exynos5_bus_mif_tmu_notifier;
+#endif
 	platform_set_drvdata(pdev, data);
 #if defined(CONFIG_DEVFREQ_GOV_SIMPLE_USAGE)
 	data->devfreq = devfreq_add_device(dev, &exynos5_mif_devfreq_profile,
@@ -1136,6 +1264,10 @@ static int exynos5_devfreq_probe(struct platform_device *pdev)
 			exynos5_mif_devfreq_profile.initial_freq, 40000 * 1000);
 	register_reboot_notifier(&exynos5_mif_reboot_notifier);
 
+#ifdef CONFIG_EXYNOS_THERMAL
+	exynos_tmu_add_notifier(&data->tmu_notifier);
+	mif_is_probed = true;
+#endif
 	return 0;
 
 err_opp_add:
