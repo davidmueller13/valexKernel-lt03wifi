@@ -41,6 +41,7 @@ struct devfreq_dev_status {
 	unsigned long total_time;
 	unsigned long busy_time;
 	unsigned long current_frequency;
+	unsigned long min_freq;
 	void *private_data;
 };
 
@@ -192,6 +193,13 @@ extern int devfreq_register_opp_notifier(struct device *dev,
 extern int devfreq_unregister_opp_notifier(struct device *dev,
 					   struct devfreq *devfreq);
 
+#ifdef CONFIG_DEVFREQ_GOV_SIMPLE_USAGE
+struct devfreq_notifier_block {
+	struct notifier_block nb;
+	struct devfreq *df;
+};
+#endif
+
 #ifdef CONFIG_DEVFREQ_GOV_SIMPLE_ONDEMAND
 /**
  * struct devfreq_simple_ondemand_data - void *data fed to struct devfreq
@@ -215,8 +223,6 @@ struct devfreq_simple_ondemand_data {
 #endif
 
 #ifdef CONFIG_DEVFREQ_GOV_SIMPLE_USAGE
-extern const struct devfreq_governor devfreq_simple_usage;
-
 struct devfreq_simple_usage_data {
 	unsigned int proportional;
 	unsigned int upthreshold;
@@ -224,11 +230,12 @@ struct devfreq_simple_usage_data {
 	int pm_qos_class;
 	unsigned long cal_qos_max;
 	bool en_monitoring;
+	struct devfreq_notifier_block nb;
 };
 #endif
 
 #ifdef CONFIG_DEVFREQ_GOV_PM_QOS
-extern const struct devfreq_governor devfreq_pm_qos;
+extern struct devfreq_governor devfreq_pm_qos;
 /**
  * struct devfreq_pm_qos_data - void *data fed to struct devfreq
  *	and devfreq_add_device

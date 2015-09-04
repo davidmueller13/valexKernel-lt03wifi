@@ -1,19 +1,19 @@
 /*
- * Copyright (c) 2012 Samsung Electronics Co., Ltd.
+ *
+ * Copyright (c) 2013 Samsung Electronics Co., Ltd.
  *		http://www.samsung.com
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 as
  * published by the Free Software Foundation.
-*/
+ */
 
 #include <linux/errno.h>
 #include <linux/devfreq.h>
 #include <linux/math64.h>
 #include <linux/pm_qos.h>
-#include <linux/list.h>
-#include <linux/mutex.h>
 #include <linux/slab.h>
+#include <linux/module.h>
 
 #include "governor.h"
 
@@ -22,27 +22,21 @@
 #define DFSO_TARGET_PERCENTAGE	(20)
 #define DFSO_PROPORTIONAL	(120)
 
-struct devfreq_simple_usage_nb {
-	struct list_head list;
-	struct notifier_block nb;
-	struct devfreq *df;
-};
-
-static LIST_HEAD(devfreq_pm_qos_list);
-static DEFINE_MUTEX(devfreq_pm_qos_lock);
-
-static int devfreq_simple_usage_notifier(struct notifier_block *nb, unsigned long val, void *data)
+static int devfreq_simple_usage_notifier(struct notifier_block *nb,
+						unsigned long val,
+						void *data)
 {
-	struct devfreq_simple_usage_nb *simple_usage_nb;
+	struct devfreq_notifier_block *devfreq_nb;
 	struct devfreq_simple_usage_data *simple_usage_data;
 
-	simple_usage_nb = container_of(nb, struct devfreq_simple_usage_nb, nb);
+	devfreq_nb = container_of(nb, struct devfreq_notifier_block, nb);
+	simple_usage_data = container_of(devfreq_nb,
+					struct devfreq_simple_usage_data, nb);
+	devfreq_nb = &simple_usage_data->nb;
 
-	simple_usage_data = simple_usage_nb->df->data;
-
-	mutex_lock(&simple_usage_nb->df->lock);
-	update_devfreq(simple_usage_nb->df);
-	mutex_unlock(&simple_usage_nb->df->lock);
+	mutex_lock(&devfreq_nb->df->lock);
+	update_devfreq(devfreq_nb->df);
+	mutex_unlock(&devfreq_nb->df->lock);
 
 	return NOTIFY_OK;
 }
@@ -51,7 +45,7 @@ static int devfreq_simple_usage_func(struct devfreq *df, unsigned long *freq)
 {
 	struct devfreq_dev_status stat;
 	int err = df->profile->get_dev_status(df->dev.parent, &stat);
-	unsigned long a, b;
+	unsigned long long a, b;
 	unsigned int dfso_upthreshold = DFSO_UPTHRESHOLD;
 	unsigned int dfso_target_percentage = DFSO_TARGET_PERCENTAGE;
 	unsigned int dfso_proportional = DFSO_PROPORTIONAL;
@@ -66,11 +60,6 @@ static int devfreq_simple_usage_func(struct devfreq *df, unsigned long *freq)
 
 	if (err)
 		return err;
-
-	if ((stat.busy_time == 0) || (stat.total_time == 0)) {
-		*freq = stat.current_frequency;
-		goto freq_calc_done;
-	}
 
 	if (data->upthreshold)
 		dfso_upthreshold = data->upthreshold;
@@ -102,7 +91,6 @@ static int devfreq_simple_usage_func(struct devfreq *df, unsigned long *freq)
 
 	*freq = (unsigned long) a;
 
-freq_calc_done:
 	if (pm_qos_min && *freq < pm_qos_min)
 		*freq = pm_qos_min;
 
@@ -114,60 +102,95 @@ freq_calc_done:
 	return 0;
 }
 
-static int devfreq_simple_usage_init(struct devfreq *df)
+static int devfreq_simple_usage_register_notifier(struct devfreq *df)
 {
-	struct devfreq_simple_usage_nb *simple_usage_nb;
+	int ret;
 	struct devfreq_simple_usage_data *data = df->data;
-	int err;
 
 	if (!data)
 		return -EINVAL;
 
-	simple_usage_nb = kzalloc(sizeof(*simple_usage_nb), GFP_KERNEL);
-	if (!simple_usage_nb)
-		return -ENOMEM;
+	data->nb.df = df;
+	data->nb.nb.notifier_call = devfreq_simple_usage_notifier;
 
-	simple_usage_nb->df = df;
-	simple_usage_nb->nb.notifier_call = devfreq_simple_usage_notifier;
-	INIT_LIST_HEAD(&simple_usage_nb->list);
-
-	err = pm_qos_add_notifier(data->pm_qos_class, &simple_usage_nb->nb);
-
-	if (err < 0)
+	ret = pm_qos_add_notifier(data->pm_qos_class, &data->nb.nb);
+	if (ret < 0)
 		goto err;
-
-	mutex_lock(&devfreq_pm_qos_lock);
-	list_add_tail(&simple_usage_nb->list, &devfreq_pm_qos_list);
-	mutex_unlock(&devfreq_pm_qos_lock);
 
 	return 0;
 err:
-	kfree(simple_usage_nb);
+	kfree((void *)&data->nb.nb);
 
-	return err;
+	return ret;
 }
 
-static void devfreq_simple_usage_exit(struct devfreq *df)
+static int devfreq_simple_usage_unregister_notifier(struct devfreq *df)
 {
-	struct devfreq_simple_usage_nb *simple_usage_nb;
-	struct devfreq_simple_usage_data *data;
+	struct devfreq_simple_usage_data *data = df->data;
 
-	mutex_lock(&devfreq_pm_qos_lock);
-
-	list_for_each_entry(simple_usage_nb, &devfreq_pm_qos_list, list) {
-		if (simple_usage_nb->df == df) {
-			data = simple_usage_nb->df->data;
-			pm_qos_remove_notifier(data->pm_qos_class, &simple_usage_nb->nb);
-			goto out;
-		}
-	}
-out:
-	mutex_unlock(&devfreq_pm_qos_lock);
+	return pm_qos_remove_notifier(data->pm_qos_class, &data->nb.nb);
 }
 
-const struct devfreq_governor devfreq_simple_usage = {
+static int devfreq_simple_usage_handler(struct devfreq *devfreq,
+				unsigned int event, void *data)
+{
+	int ret;
+
+	switch (event) {
+	case DEVFREQ_GOV_START:
+		ret = devfreq_simple_usage_register_notifier(devfreq);
+		if (ret)
+			return ret;
+		devfreq_monitor_start(devfreq);
+		break;
+
+	case DEVFREQ_GOV_STOP:
+		devfreq_monitor_stop(devfreq);
+		ret = devfreq_simple_usage_unregister_notifier(devfreq);
+		if (ret)
+			return ret;
+		break;
+
+	case DEVFREQ_GOV_INTERVAL:
+		devfreq_interval_update(devfreq, (unsigned int*)data);
+		break;
+
+	case DEVFREQ_GOV_SUSPEND:
+		devfreq_monitor_suspend(devfreq);
+		break;
+
+	case DEVFREQ_GOV_RESUME:
+		devfreq_monitor_resume(devfreq);
+		break;
+
+	default:
+		break;
+	}
+
+	return 0;
+}
+
+static struct devfreq_governor devfreq_simple_usage = {
 	.name = "simple_usage",
 	.get_target_freq = devfreq_simple_usage_func,
-	.init = devfreq_simple_usage_init,
-	.exit = devfreq_simple_usage_exit,
+	.event_handler = devfreq_simple_usage_handler,
 };
+
+static int __init devfreq_simple_usage_init(void)
+{
+	return devfreq_add_governor(&devfreq_simple_usage);
+}
+subsys_initcall(devfreq_simple_usage_init);
+
+static void __exit devfreq_simple_usage_exit(void)
+{
+	int ret;
+
+	ret = devfreq_remove_governor(&devfreq_simple_usage);
+	if (ret)
+		pr_err("%s: failed remove governor %d\n", __func__, ret);
+
+	return;
+}
+module_exit(devfreq_simple_usage_exit);
+MODULE_LICENSE("GPL");

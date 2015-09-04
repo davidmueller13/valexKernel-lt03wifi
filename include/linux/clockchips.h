@@ -156,54 +156,28 @@ clockevents_calc_mult_shift(struct clock_event_device *ce, u32 freq, u32 minsec)
 				      freq, minsec);
 }
 
-static DEFINE_PER_CPU(atomic_t, tick_broadcast_count);
-static DEFINE_PER_CPU(struct call_single_data, tick_broadcast_csd);
+extern void clockevents_suspend(void);
+extern void clockevents_resume(void);
 
-void tick_broadcast(const struct cpumask *mask)
-{
-        atomic_t *count;
-        struct call_single_data *csd;
-        int cpu;
-
-        for_each_cpu(cpu, mask) {
-                count = &per_cpu(tick_broadcast_count, cpu);
-                csd = &per_cpu(tick_broadcast_csd, cpu);
-
-                if (atomic_inc_return(count) == 1)
-                        smp_call_function_single_async(cpu, csd);
-        }
-}
-
-static void tick_broadcast_callee(void *info)
-{
-        int cpu = smp_processor_id();
-        tick_receive_broadcast();
-        atomic_set(&per_cpu(tick_broadcast_count, cpu), 0);
-}
-
-static int __init tick_broadcast_init(void)
-{
-        struct call_single_data *csd;
-        int cpu;
-
-        for (cpu = 0; cpu < NR_CPUS; cpu++) {
-                csd = &per_cpu(tick_broadcast_csd, cpu);
-                csd->func = tick_broadcast_callee;
-        }
-
-        return 0;
-}
-	early_initcall(tick_broadcast_init);
-
-#endif /* CONFIG_GENERIC_CLOCKEVENTS_BROADCAST */
+#ifdef CONFIG_GENERIC_CLOCKEVENTS_BROADCAST
+#ifdef CONFIG_ARCH_HAS_TICK_BROADCAST
+extern void tick_broadcast(const struct cpumask *mask);
+#else
+#define tick_broadcast       NULL
+#endif
+extern int tick_receive_broadcast(void);
+#endif
 
 #ifdef CONFIG_GENERIC_CLOCKEVENTS
 extern void clockevents_notify(unsigned long reason, void *arg);
 #else
-# define clockevents_notify(reason, arg) do { } while (0)
+#define clockevents_notify(reason, arg) do { } while (0)
 #endif
 
 #else /* CONFIG_GENERIC_CLOCKEVENTS_BUILD */
+
+static inline void clockevents_suspend(void) {}
+static inline void clockevents_resume(void) {}
 
 #define clockevents_notify(reason, arg) do { } while (0)
 

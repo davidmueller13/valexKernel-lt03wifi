@@ -24,6 +24,10 @@ config KTIME_SCALAR
 config ARCH_USES_GETTIMEOFFSET
 	bool
 
+# Architecture can handle broadcast in a driver-agnostic way
+config ARCH_HAS_TICK_BROADCAST
+         bool  
+
 # The generic clock events infrastructure
 config GENERIC_CLOCKEVENTS
 	bool

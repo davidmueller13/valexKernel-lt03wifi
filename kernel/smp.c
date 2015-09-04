@@ -309,16 +309,23 @@ call:
 EXPORT_SYMBOL_GPL(smp_call_function_any);
 
 /**
- * __smp_call_function_single(): Run a function on a specific CPU
+ * smp_call_function_single_async(): Run an asynchronous function on a
+ * 			         specific CPU.
  * @cpu: The CPU to run on.
  * @data: Pre-allocated and setup data structure
  * @wait: If true, wait until function has completed on specified CPU.
  *
- * Like smp_call_function_single(), but allow caller to pass in a
- * pre-allocated data structure. Useful for embedding @data inside
- * other structures, for instance.
+ * Like smp_call_function_single(), but the call is asynchonous and
+ * can thus be done from contexts with disabled interrupts.
+ *
+ * The caller passes his own pre-allocated data structure
+ * (ie: embedded in an object) and is responsible for synchronizing it
+ * such that the IPIs performed on the @csd are strictly serialized.
+ *
+ * NOTE: Be careful, there is unfortunately no current debugging facility to
+ * validate the correctness of this serialization.
  */
-void __smp_call_function_single(int cpu, struct call_single_data *csd,
+void smp_call_function_single_async(int cpu, struct call_single_data *csd,
 				int wait)
 {
 	unsigned int this_cpu;
