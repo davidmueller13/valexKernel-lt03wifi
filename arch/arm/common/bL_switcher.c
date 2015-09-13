@@ -7,111 +7,97 @@
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 as
  * published by the Free Software Foundation.
- *
- * TODO:
- *
- * - Allow the outbound CPU to remain online for the inbound CPU to snoop its
- *   cache for a while.
- * - Perform a switch during initialization to probe what the counterpart
- *   CPU's GIC interface ID is and stop hardcoding them in the code.
- * - Local timers migration (they are not supported at the moment).
  */
 
+#include <linux/atomic.h>
 #include <linux/init.h>
 #include <linux/kernel.h>
 #include <linux/module.h>
+#include <linux/sched.h>
 #include <linux/interrupt.h>
 #include <linux/cpu_pm.h>
+#include <linux/cpu.h>
+#include <linux/cpumask.h>
 #include <linux/kthread.h>
 #include <linux/wait.h>
-#include <linux/cpu.h>
+#include <linux/time.h>
+#include <linux/clockchips.h>
+#include <linux/hrtimer.h>
+#include <linux/tick.h>
+#include <linux/notifier.h>
 #include <linux/mm.h>
-#include <linux/string.h>
+#include <linux/mutex.h>
+#include <linux/smp.h>
 #include <linux/spinlock.h>
+#include <linux/string.h>
+#include <linux/sysfs.h>
+#include <linux/moduleparam.h>
+#include <linux/of.h>
 #include <linux/irqchip/arm-gic.h>
 
+#include <asm/smp_plat.h>
+#include <asm/cacheflush.h>
+#include <asm/cputype.h>
 #include <asm/suspend.h>
+#include <asm/mcpm.h>
 #include <asm/bL_switcher.h>
-#include <asm/bL_entry.h>
-#include <mach/sec_debug.h>
 
-/*
- * Notifier list for kernel code which want to called at switch.
- * This is used to stop a switch. If some driver want to keep doing
- * some work without switch, the driver registers the notifier and
- * the notifier callback deal with refusing a switch and some work.
- */
-ATOMIC_NOTIFIER_HEAD(bL_switcher_notifier_list);
+#define CREATE_TRACE_POINTS
+#include <trace/events/power_cpu_migrate.h>
 
-int register_bL_swicher_notifier(struct notifier_block *nb)
-{
-	return atomic_notifier_chain_register(&bL_switcher_notifier_list, nb);
-}
-
-int unregister_bL_swicher_notifier(struct notifier_block *nb)
-{
-	return atomic_notifier_chain_unregister(&bL_switcher_notifier_list, nb);
-}
-
-/*
- * Before migrating cpu, swicher core driver ask to some dirver
- * whether carries out a switch or not.
- *
- * Switcher core driver decides to do a switch through return value
- * (-) minus value : refuse a switch
- * (+) plus value : go on a switch
- */
-static int bL_enter_migration(void)
-{
-	return atomic_notifier_call_chain(&bL_switcher_notifier_list, SWITCH_ENTER, NULL);
-}
-
-static int bL_exit_migration(void)
-{
-	return atomic_notifier_call_chain(&bL_switcher_notifier_list, SWITCH_EXIT, NULL);
-}
 
 /*
  * Use our own MPIDR accessors as the generic ones in asm/cputype.h have
  * __attribute_const__ and we don't want the compiler to assume any
- * constness here.
+ * constness here as the value _does_ change along some code paths.
  */
 
 static int read_mpidr(void)
 {
 	unsigned int id;
 	asm volatile ("mrc\tp15, 0, %0, c0, c0, 5" : "=r" (id));
-	return id;
+	return id & MPIDR_HWID_BITMASK;
+}
+
+/*
+ * Get a global nanosecond time stamp for tracing.
+ */
+static s64 get_ns(void)
+{
+	struct timespec ts;
+	getnstimeofday(&ts);
+	return timespec_to_ns(&ts);
 }
 
 /*
  * bL switcher core code.
  */
 
-const struct bL_power_ops *bL_platform_ops;
-
-extern void setup_mm_for_reboot(void);
-
-typedef void (*phys_reset_t)(unsigned long);
-
-static void bL_do_switch(void *_unused)
+static void bL_do_switch(void *_arg)
 {
 	unsigned mpidr, cpuid, clusterid, ob_cluster, ib_cluster;
-	phys_reset_t phys_reset;
+	long volatile handshake, **handshake_ptr = _arg;
 
 	pr_debug("%s\n", __func__);
 
 	mpidr = read_mpidr();
-	cpuid = mpidr & 0xf;
-	clusterid = (mpidr >> 8) & 0xf;
+	cpuid = MPIDR_AFFINITY_LEVEL(mpidr, 0);
+	clusterid = MPIDR_AFFINITY_LEVEL(mpidr, 1);
 	ob_cluster = clusterid;
 	ib_cluster = clusterid ^ 1;
+
+	/* Advertise our handshake location */
+	if (handshake_ptr) {
+		handshake = 0;
+		*handshake_ptr = &handshake;
+	} else
+		handshake = -1;
 
 	/*
 	 * Our state has been saved at this point.  Let's release our
 	 * inbound CPU.
 	 */
-	bL_set_entry_vector(cpuid, ib_cluster, cpu_resume);
+	mcpm_set_entry_vector(cpuid, ib_cluster, cpu_resume);
 	sev();
 
 	/*
@@ -121,57 +107,50 @@ static void bL_do_switch(void *_unused)
 	 * be very careful not to make any change the other guy is not
 	 * expecting.  This is why we need stack isolation.
 	 *
-	 * Also, because of this special stack, we cannot rely on anything
-	 * that expects a valid 'current' pointer.  For example, printk()
-	 * may give bogus "BUG: recent printk recursion!\n" messages
-	 * because of that.
+	 * Fancy under cover tasks could be performed here.  For now
+	 * we have none.
 	 */
-	bL_platform_ops->power_down(cpuid, ob_cluster);
 
 	/*
-	 * Hey, we're not dead!  This means a request to switch back
-	 * has come from our counterpart and reset was deasserted before
-	 * we had the chance to enter WFI.  Let's turn off the MMU and
-	 * branch back directly through our kernel entry point.
+	 * Let's wait until our inbound is alive.
 	 */
-	setup_mm_for_reboot();
-	phys_reset = (phys_reset_t)(unsigned long)virt_to_phys(cpu_reset);
-	phys_reset(virt_to_phys(bl_entry_point));
+	while (!handshake) {
+		wfe();
+		smp_mb();
+	}
+
+	/* Let's put ourself down. */
+	mcpm_cpu_power_down();
 
 	/* should never get here */
 	BUG();
 }
 
 /*
- * Stack isolation (size needs to be optimized)
+ * Stack isolation.  To ensure 'current' remains valid, we just use another
+ * piece of our thread's stack space which should be fairly lightly used.
+ * The selected area starts just above the thread_info structure located
+ * at the very bottom of the stack, aligned to a cache line, and indexed
+ * with the cluster number.
  */
-
-static unsigned long __attribute__((__aligned__(L1_CACHE_BYTES)))
-	stacks[BL_CPUS_PER_CLUSTER][BL_NR_CLUSTERS][128];
-
+#define STACK_SIZE 512
 extern void call_with_stack(void (*fn)(void *), void *arg, void *sp);
-
-static int bL_switchpoint(unsigned long _unused)
+static int bL_switchpoint(unsigned long _arg)
 {
 	unsigned int mpidr = read_mpidr();
-	unsigned int cpuid = mpidr & 0xf;
-	unsigned int clusterid = (mpidr >> 8) & 0xf;
-	void *stack = stacks[cpuid][clusterid] + ARRAY_SIZE(stacks[0][0]);
-	call_with_stack(bL_do_switch, NULL, stack);
+	unsigned int clusterid = MPIDR_AFFINITY_LEVEL(mpidr, 1);
+	void *stack = current_thread_info() + 1;
+	stack = PTR_ALIGN(stack, L1_CACHE_BYTES);
+	stack += clusterid * STACK_SIZE + STACK_SIZE;
+	call_with_stack(bL_do_switch, (void *)_arg, stack);
 	BUG();
-
-	/*
-	 * For removing warning message of compiler, the statement of return
-	 * is added, but this return is nothing to this function.
-	 */
-	return 0;
 }
 
 /*
  * Generic switcher interface
  */
 
-static DEFINE_SPINLOCK(switch_gic_lock);
+static unsigned int bL_gic_id[MAX_CPUS_PER_CLUSTER][MAX_NR_CLUSTERS];
 
 /*
  * bL_switch_to - Switch to a specific cluster for the current CPU
@@ -182,79 +161,123 @@ static DEFINE_SPINLOCK(switch_gic_lock);
  */
 static int bL_switch_to(unsigned int new_cluster_id)
 {
-	unsigned int mpidr, cpuid, clusterid, ob_cluster, ib_cluster;
-	int ret = 0;
+	unsigned int mpidr, cpuid, clusterid, ob_cluster, ib_cluster, this_cpu;
+	struct completion inbound_alive;
+	struct tick_device *tdev;
+	enum clock_event_mode tdev_mode;
+	long volatile *handshake_ptr;
+	int ipi_nr, ret;
 
 	mpidr = read_mpidr();
-	cpuid = mpidr & 0xf;
-	clusterid = (mpidr >> 8) & 0xf;
+	cpuid = MPIDR_AFFINITY_LEVEL(mpidr, 0);
+	clusterid = MPIDR_AFFINITY_LEVEL(mpidr, 1);
 	ob_cluster = clusterid;
 	ib_cluster = clusterid ^ 1;
 
 	if (new_cluster_id == clusterid)
 		return 0;
 
-	if (!bL_platform_ops)
-		return -ENOSYS;
-
 	pr_debug("before switch: CPU %d in cluster %d\n", cpuid, clusterid);
-	sec_debug_task_log_msg(cpuid, "switch+");
+
+	this_cpu = smp_processor_id();
 
 	/* Close the gate for our entry vectors */
-	bL_set_entry_vector(cpuid, ob_cluster, NULL);
-	bL_set_entry_vector(cpuid, ib_cluster, NULL);
+	mcpm_set_entry_vector(cpuid, ob_cluster, NULL);
+	mcpm_set_entry_vector(cpuid, ib_cluster, NULL);
+
+	/* Install our "inbound alive" notifier. */
+	init_completion(&inbound_alive);
+	ipi_nr = register_ipi_completion(&inbound_alive, this_cpu);
+	ipi_nr |= ((1 << 16) << bL_gic_id[cpuid][ob_cluster]);
+	mcpm_set_early_poke(cpuid, ib_cluster, gic_get_sgir_physaddr(), ipi_nr);
+
+	/*
+	 * Let's wake up the inbound CPU now in case it requires some delay
+	 * to come online, but leave it gated in our entry vector code.
+	 */
+	ret = mcpm_cpu_power_up(cpuid, ib_cluster);
+	if (ret) {
+		pr_err("%s: mcpm_cpu_power_up() returned %d\n", __func__, ret);
+		return ret;
+	}
+
+	/*
+	 * Raise a SGI on the inbound CPU to make sure it doesn't stall
+	 * in a possible WFI, such as in bL_power_down().
+	 */
+	gic_send_sgi(bL_gic_id[cpuid][ib_cluster], 0);
+
+	/*
+	 * Wait for the inbound to come up.  This allows for other
+	 * tasks to be scheduled in the mean time.
+	 */
+	wait_for_completion(&inbound_alive);
+	mcpm_set_early_poke(cpuid, ib_cluster, 0, 0);
 
 	/*
 	 * From this point we are entering the switch critical zone
 	 * and can't sleep/schedule anymore.
 	 */
 	local_irq_disable();
+	local_fiq_disable();
+	trace_cpu_migrate_begin(get_ns(), mpidr & MPIDR_HWID_BITMASK);
 
-	/*
-	 * Get spin_lock to protect concurrent accesses of GIC registers
-	 * from both NWd(gic_migrate_target) and SWd(SMC of bL_power_up).
-	 */
-	spin_lock(&switch_gic_lock);
-
-	/*
-	 * Let's wake up the inbound CPU now in case it requires some delay
-	 * to come online, but leave it gated in our entry vector code.
-	 */
-	bL_platform_ops->power_up(cpuid, ib_cluster);
+	this_cpu = smp_processor_id();
 
 	/* redirect GIC's SGIs to our counterpart */
-	gic_migrate_target(cpuid + ib_cluster*4);
+	gic_migrate_target(bL_gic_id[cpuid][ib_cluster]);
 
-	/*
-	 * Raise a SGI on the inbound CPU to make sure it doesn't stall
-	 * in a possible WFI, such as the one in bL_do_switch().
-	 */
-	/* arm_send_ping_ipi(smp_processor_id()); */
-
-	spin_unlock(&switch_gic_lock);
+	tdev = tick_get_device(this_cpu);
+	if (tdev && !cpumask_equal(tdev->evtdev->cpumask, cpumask_of(this_cpu)))
+		tdev = NULL;
+	if (tdev) {
+		tdev_mode = tdev->evtdev->mode;
+		clockevents_set_mode(tdev->evtdev, CLOCK_EVT_MODE_SHUTDOWN);
+	}
 
 	ret = cpu_pm_enter();
+
+	/* we can not tolerate errors at this point */
 	if (ret)
-		goto out;
+		panic("%s: cpu_pm_enter() returned %d\n", __func__, ret);
+
+	/*
+	 * Flip the cluster in the CPU logical map for this CPU.
+	 * This must be flushed to RAM as the resume code
+	 * needs to access it while the caches are still disabled.
+	 */
+	cpu_logical_map(this_cpu) ^= (1 << 8);
+	__cpuc_flush_dcache_area(&cpu_logical_map(this_cpu),
+				 sizeof(cpu_logical_map(this_cpu)));
 
 	/* Let's do the actual CPU switch. */
-	ret = cpu_suspend((unsigned long)NULL, bL_switchpoint);
+	ret = cpu_suspend((unsigned long)&handshake_ptr, bL_switchpoint);
 	if (ret > 0)
-		ret = -EINVAL;
+		panic("%s: cpu_suspend() returned %d\n", __func__, ret);
 
 	/* We are executing on the inbound CPU at this point */
 	mpidr = read_mpidr();
-	cpuid = mpidr & 0xf;
-	clusterid = (mpidr >> 8) & 0xf;
+	cpuid = MPIDR_AFFINITY_LEVEL(mpidr, 0);
+	clusterid = MPIDR_AFFINITY_LEVEL(mpidr, 1);
 	pr_debug("after switch: CPU %d in cluster %d\n", cpuid, clusterid);
-	sec_debug_task_log_msg(cpuid, "switch-");
 	BUG_ON(clusterid != ib_cluster);
 
-	bL_platform_ops->inbound_setup(cpuid, !clusterid);
 	ret = cpu_pm_exit();
 
-out:
+	if (tdev) {
+		clockevents_set_mode(tdev->evtdev, tdev_mode);
+		clockevents_program_event(tdev->evtdev,
+					  tdev->evtdev->next_event, 1);
+	}
+
+	trace_cpu_migrate_finish(get_ns(), mpidr & MPIDR_HWID_BITMASK);
+	local_fiq_enable();
 	local_irq_enable();
+
+	*handshake_ptr = 1;
+	dsb_sev();
+
+	mcpm_cpu_powered_up(true);
 
 	if (ret)
 		pr_err("%s exiting with error %d\n", __func__, ret);
@@ -262,235 +285,538 @@ out:
 }
 
 struct bL_thread {
+	spinlock_t lock;
 	struct task_struct *task;
 	wait_queue_head_t wq;
 	int wanted_cluster;
+	struct completion started;
+	bL_switch_completion_handler completer;
+	void *completer_cookie;
 };
 
-static struct bL_thread bL_threads[BL_CPUS_PER_CLUSTER];
+static struct bL_thread bL_threads[MAX_CPUS_PER_CLUSTER];
 
-static int switch_ready = -1;
-static DEFINE_SPINLOCK(switch_ready_lock);
-#define BL_TIMEOUT_NS 50000000
 static int bL_switcher_thread(void *arg)
 {
 	struct bL_thread *t = arg;
 	struct sched_param param = { .sched_priority = 1 };
-	int ret;
+	int cluster;
+	bL_switch_completion_handler completer;
+	void *completer_cookie;
 
 	sched_setscheduler_nocheck(current, SCHED_FIFO, &param);
+	complete(&t->started);
 
 	do {
-		ret = wait_event_interruptible(t->wq, t->wanted_cluster != -1);
-		if (!ret) {
-			int cluster = t->wanted_cluster;
-#ifdef CONFIG_EXYNOS5_CCI
-			t->wanted_cluster = -1;
+		if (signal_pending(current))
+			flush_signals(current);
+		wait_event_interruptible(t->wq,
+				t->wanted_cluster != -1 ||
+				kthread_should_stop());
+
+		spin_lock(&t->lock);
+		cluster = t->wanted_cluster;
+		completer = t->completer;
+		completer_cookie = t->completer_cookie;
+		t->wanted_cluster = -1;
+		t->completer = NULL;
+		spin_unlock(&t->lock);
+
+		if (cluster != -1) {
 			bL_switch_to(cluster);
-#else
-			static atomic_t switch_ready_cnt = ATOMIC_INIT(0);
-			unsigned long long start = sched_clock();
-			unsigned int cpuid = get_cpu();
-			signed long long wait_time = 0;
 
-			atomic_inc(&switch_ready_cnt);
-			dmb();
-
-			spin_lock(&switch_ready_lock);
-			if (switch_ready < 0) {
-				while (atomic_read(&switch_ready_cnt) <
-						num_online_cpus()) {
-					wait_time = sched_clock() - start;
-					if ((wait_time > BL_TIMEOUT_NS) ||
-							(wait_time < 0))
-						break;
-				}
-
-				if (wait_time > BL_TIMEOUT_NS) {
-					switch_ready = 0;
-					pr_info("%s: aborted on CPU %d by timeout (%ld msecs)\n",
-							__func__, cpuid,
-							(int) wait_time / NSEC_PER_MSEC);
-				} else if (wait_time < 0) {
-					switch_ready = 0;
-					pr_info("%s: sched_clock is reversed\n",
-							__func__);
-				} else {
-					switch_ready = 1;
-				}
-			}
-			spin_unlock(&switch_ready_lock);
-
-			atomic_dec(&switch_ready_cnt);
-
-			t->wanted_cluster = -1;
-
-			spin_lock(&switch_ready_lock);
-			if (switch_ready == 1) {
-				spin_unlock(&switch_ready_lock);
-				/* condition met before timeout */
-				bL_switch_to(cluster);
-			} else {
-				spin_unlock(&switch_ready_lock);
-			}
-
-			put_cpu();
-#endif
+			if (completer)
+				completer(completer_cookie);
 		}
 	} while (!kthread_should_stop());
-
-	return ret;
-}
-
-static int __init bL_switcher_thread_create(unsigned int cpu, struct bL_thread *t)
-{
-	t->task = kthread_create_on_node(bL_switcher_thread, t,
-					 cpu_to_node(cpu),
-					 "kswitcher_%d", cpu);
-	if (IS_ERR(t->task)) {
-		pr_err("%s failed for CPU %d\n", __func__, cpu);
-		return PTR_ERR(t->task);
-	}
-	kthread_bind(t->task, cpu);
-	init_waitqueue_head(&t->wq);
-	t->wanted_cluster = -1;
-	wake_up_process(t->task);
 
 	return 0;
 }
 
-static unsigned int switch_operation = 0x11;
-
-/*
- * bL_check_auto_switcher_enable - check whether enable or disable switch
- * automatically
- */
-bool bL_check_auto_switcher_enable(void)
+static struct task_struct *bL_switcher_thread_create(int cpu, void *arg)
 {
-	bool result = true;
+	struct task_struct *task;
 
-	if (switch_operation != 0x11)
-		result = false;
-
-	return result;
+	task = kthread_create_on_node(bL_switcher_thread, arg,
+				      cpu_to_node(cpu), "kswitcher_%d", cpu);
+	if (!IS_ERR(task)) {
+		kthread_bind(task, cpu);
+		wake_up_process(task);
+	} else
+		pr_err("%s failed for CPU %d\n", __func__, cpu);
+	return task;
 }
 
 /*
- * bL_switch_request - Switch to a specific cluster for the given CPU
+ * bL_switch_request_cb - Switch to a specific cluster for the given CPU,
+ *      with completion notification via a callback
  *
  * @cpu: the CPU to switch
  * @new_cluster_id: the ID of the cluster to switch to.
+ * @completer: switch completion callback.  if non-NULL,
+ *	@completer(@completer_cookie) will be called on completion of
+ *	the switch, in non-atomic context.
+ * @completer_cookie: opaque context argument for @completer.
  *
- * This function causes a cluster switch on the given CPU.  If the given
- * CPU is the same as the calling CPU then the switch happens right away.
- * Otherwise the request is put on a work queue to be scheduled on the
- * remote CPU.
+ * This function causes a cluster switch on the given CPU by waking up
+ * the appropriate switcher thread.  This function may or may not return
+ * before the switch has occurred.
+ *
+ * If a @completer callback function is supplied, it will be called when
+ * the switch is complete.  This can be used to determine asynchronously
+ * when the switch is complete, regardless of when bL_switch_request()
+ * returns.  When @completer is supplied, no new switch request is permitted
+ * for the affected CPU until after the switch is complete, and @completer
+ * has returned.
  */
-void bL_switch_request(unsigned int cpu, unsigned int new_cluster_id)
+int bL_switch_request_cb(unsigned int cpu, unsigned int new_cluster_id,
+			 bL_switch_completion_handler completer,
+			 void *completer_cookie)
 {
 	struct bL_thread *t;
 
-	if (switch_operation == 0x00)
-		return;
+	if (cpu >= MAX_CPUS_PER_CLUSTER) {
+		pr_err("%s: cpu %d out of bounds\n", __func__, cpu);
+		return -EINVAL;
+	}
 
-	if (cpu >= BL_CPUS_PER_CLUSTER) {
+	t = &bL_threads[cpu];
+
+	if (IS_ERR(t->task))
+		return PTR_ERR(t->task);
+	if (!t->task)
+		return -ESRCH;
+
+	spin_lock(&t->lock);
+	if (t->completer) {
+		spin_unlock(&t->lock);
+		return -EBUSY;
+	}
+	t->completer = completer;
+	t->completer_cookie = completer_cookie;
+	t->wanted_cluster = new_cluster_id;
+	spin_unlock(&t->lock);
+	wake_up(&t->wq);
+	return 0;
+}
+EXPORT_SYMBOL_GPL(bL_switch_request_cb);
+
+/*
+ * Detach an outstanding switch request.
+ *
+ * The switcher will continue with the switch request in the background,
+ * but the completer function will not be called.
+ *
+ * This may be necessary if the completer is in a kernel module which is
+ * about to be unloaded.
+ */
+void bL_switch_request_detach(unsigned int cpu,
+			      bL_switch_completion_handler completer)
+{
+	struct bL_thread *t;
+
+	if (cpu >= ARRAY_SIZE(bL_threads)) {
 		pr_err("%s: cpu %d out of bounds\n", __func__, cpu);
 		return;
 	}
 
 	t = &bL_threads[cpu];
-	if (IS_ERR_OR_NULL(t->task)) {
-		pr_err("%s: cpu %d out of bounds\n", __func__, cpu);
+
+	if (IS_ERR(t->task) || !t->task)
 		return;
-	}
 
-	t->wanted_cluster = new_cluster_id;
-	wake_up(&t->wq);
+	spin_lock(&t->lock);
+	if (t->completer == completer)
+		t->completer = NULL;
+	spin_unlock(&t->lock);
 }
+EXPORT_SYMBOL_GPL(bL_switch_request_detach);
 
-EXPORT_SYMBOL_GPL(bL_switch_request);
+/*
+ * Activation and configuration code.
+ */
 
-int bL_cluster_switch_request(unsigned int new_cluster)
+static DEFINE_MUTEX(bL_switcher_activation_lock);
+static BLOCKING_NOTIFIER_HEAD(bL_activation_notifier);
+static unsigned int bL_switcher_active;
+static unsigned int bL_switcher_cpu_original_cluster[MAX_CPUS_PER_CLUSTER];
+static cpumask_t bL_switcher_removed_logical_cpus;
+
+int bL_switcher_register_notifier(struct notifier_block *nb)
 {
-	struct bL_thread *t;
-	int cpu;
+	return blocking_notifier_chain_register(&bL_activation_notifier, nb);
+}
+EXPORT_SYMBOL_GPL(bL_switcher_register_notifier);
+
+int bL_switcher_unregister_notifier(struct notifier_block *nb)
+{
+	return blocking_notifier_chain_unregister(&bL_activation_notifier, nb);
+}
+EXPORT_SYMBOL_GPL(bL_switcher_unregister_notifier);
+
+static int bL_activation_notify(unsigned long val)
+{
 	int ret;
 
-	BUG_ON(new_cluster >= 2);
+	ret = blocking_notifier_call_chain(&bL_activation_notifier, val, NULL);
+	if (ret & NOTIFY_STOP_MASK)
+		pr_err("%s: notifier chain failed with status 0x%x\n",
+			__func__, ret);
+	return notifier_to_errno(ret);
+}
 
-	if (unlikely(switch_operation == 0x00))
-		return -EINVAL;
+static void bL_switcher_restore_cpus(void)
+{
+	int i;
 
-	get_online_cpus();
+	for_each_cpu(i, &bL_switcher_removed_logical_cpus)
+		cpu_up(i);
+}
 
-	spin_lock(&switch_ready_lock);
-	switch_ready = -1;
-	spin_unlock(&switch_ready_lock);
+static int bL_switcher_halve_cpus(void)
+{
+	int cpu, cluster, i, ret;
+	cpumask_t cluster_mask[2], common_mask;
 
-	local_irq_disable();
-	if (bL_enter_migration() < 0) {
-		local_irq_enable();
-		put_online_cpus();
-		return -EPERM;
+	cpumask_clear(&bL_switcher_removed_logical_cpus);
+	cpumask_clear(&cluster_mask[0]);
+	cpumask_clear(&cluster_mask[1]);
+
+	for_each_online_cpu(i) {
+		cpu = cpu_logical_map(i) & 0xff;
+		cluster = (cpu_logical_map(i) >> 8) & 0xff;
+		if (cluster >= 2) {
+			pr_err("%s: only dual cluster systems are supported\n",
+			       __func__);
+			return -EINVAL;
+		}
+		cpumask_set_cpu(cpu, &cluster_mask[cluster]);
 	}
 
-	for (cpu = BL_CPUS_PER_CLUSTER - 1; cpu >= 0; cpu--) {
-		if (unlikely(!cpu_online(cpu)))
-			continue;
+	if (!cpumask_and(&common_mask, &cluster_mask[0], &cluster_mask[1])) {
+		pr_err("%s: no common set of CPUs\n", __func__);
+		return -EINVAL;
+	}
 
-		t = &bL_threads[cpu];
+	for_each_online_cpu(i) {
+		cpu = cpu_logical_map(i) & 0xff;
+		cluster = (cpu_logical_map(i) >> 8) & 0xff;
 
-		if (unlikely(IS_ERR_OR_NULL(t->task))) {
-			pr_err("%s: cpu %d out of bounds\n", __func__, cpu);
-			ret = PTR_ERR(t->task);
-			if (!ret)
-				ret = -ENODEV;
-			local_irq_enable();
-			put_online_cpus();
-			return ret;
+		if (cpumask_test_cpu(cpu, &common_mask)) {
+			/* Let's take note of the GIC ID for this CPU */
+			int gic_id = gic_get_cpu_id(i);
+			if (gic_id < 0) {
+				pr_err("%s: bad GIC ID for CPU %d\n",
+				       __func__, i);
+				return -EINVAL;
+			}
+			bL_gic_id[cpu][cluster] = gic_id;
+			pr_info("GIC ID for CPU %u cluster %u is %u\n",
+				cpu, cluster, gic_id);
+
+			/*
+			 * We keep only those logical CPUs which number
+			 * is equal to their physical CPU number. This is
+			 * not perfect but good enough in most cases.
+			 */
+			if (cpu == i) {
+				bL_switcher_cpu_original_cluster[cpu] = cluster;
+				continue;
+			}
 		}
 
-		t->wanted_cluster = new_cluster;
-		wake_up(&t->wq);
-		smp_send_reschedule(cpu);
+		ret = cpu_down(i);
+		if (ret) {
+			bL_switcher_restore_cpus();
+			return ret;
+		}
+		cpumask_set_cpu(i, &bL_switcher_removed_logical_cpus);
 	}
-	local_irq_enable();
-	schedule();
-	put_online_cpus();
 
-	bL_exit_migration();
-
-	ret = ((read_mpidr() >> 8) & 0xf) == new_cluster ? 0 : -EBUSY;
-	return ret;
+	return 0;
 }
 
-EXPORT_SYMBOL_GPL(bL_cluster_switch_request);
-
-static void __init switcher_thread_on_each_cpu(struct work_struct *work)
+static void bL_switcher_trace_trigger_cpu(void *__always_unused info)
 {
-	unsigned int mpidr, cluster, cpuid;
-	mpidr = read_mpidr();
-	cluster = (mpidr >> 8) & 0xf;
-	cpuid = mpidr & 0xf;
-
-	BUG_ON(cluster > 2 || cpuid > 4);
-	pr_debug("create switcher thread %d(%d)\n", cpuid, cluster);
-
-	bL_switcher_thread_create(cpuid, &bL_threads[cpuid]);
+	trace_cpu_migrate_current(get_ns(), read_mpidr());
 }
 
-int __init bL_switcher_init(const struct bL_power_ops *ops)
+int bL_switcher_trace_trigger(void)
 {
 	int ret;
+
+	preempt_disable();
+
+	bL_switcher_trace_trigger_cpu(NULL);
+	ret = smp_call_function(bL_switcher_trace_trigger_cpu, NULL, true);
+
+	preempt_enable();
+
+	return ret;
+}
+EXPORT_SYMBOL_GPL(bL_switcher_trace_trigger);
+
+static int bL_switcher_enable(void)
+{
+	int cpu, ret;
+
+	mutex_lock(&bL_switcher_activation_lock);
+	cpu_hotplug_driver_lock();
+	if (bL_switcher_active) {
+		cpu_hotplug_driver_unlock();
+		mutex_unlock(&bL_switcher_activation_lock);
+		return 0;
+	}
 
 	pr_info("big.LITTLE switcher initializing\n");
 
-	ret = bL_cluster_sync_init(ops);
+	ret = bL_activation_notify(BL_NOTIFY_PRE_ENABLE);
 	if (ret)
-		return ret;
+		goto error;
 
-	bL_platform_ops = ops;
-	schedule_on_each_cpu(switcher_thread_on_each_cpu);
+	ret = bL_switcher_halve_cpus();
+	if (ret)
+		goto error;
+
+	bL_switcher_trace_trigger();
+
+	for_each_online_cpu(cpu) {
+		struct bL_thread *t = &bL_threads[cpu];
+		spin_lock_init(&t->lock);
+		init_waitqueue_head(&t->wq);
+		init_completion(&t->started);
+		t->wanted_cluster = -1;
+		t->task = bL_switcher_thread_create(cpu, t);
+	}
+
+	bL_switcher_active = 1;
+	bL_activation_notify(BL_NOTIFY_POST_ENABLE);
 	pr_info("big.LITTLE switcher initialized\n");
+	goto out;
+
+error:
+	pr_warning("big.LITTLE switcher initialization failed\n");
+	bL_activation_notify(BL_NOTIFY_POST_DISABLE);
+
+out:
+	cpu_hotplug_driver_unlock();
+	mutex_unlock(&bL_switcher_activation_lock);
+	return ret;
+}
+
+#ifdef CONFIG_SYSFS
+
+static void bL_switcher_disable(void)
+{
+	unsigned int cpu, cluster, i;
+	struct bL_thread *t;
+	struct task_struct *task;
+
+	mutex_lock(&bL_switcher_activation_lock);
+	cpu_hotplug_driver_lock();
+
+	if (!bL_switcher_active)
+		goto out;
+
+	if (bL_activation_notify(BL_NOTIFY_PRE_DISABLE) != 0) {
+		bL_activation_notify(BL_NOTIFY_POST_ENABLE);
+		goto out;
+	}
+
+	bL_switcher_active = 0;
+
+	/*
+	 * To deactivate the switcher, we must shut down the switcher
+	 * threads to prevent any other requests from being accepted.
+	 * Then, if the final cluster for given logical CPU is not the
+	 * same as the original one, we'll recreate a switcher thread
+	 * just for the purpose of switching the CPU back without any
+	 * possibility for interference from external requests.
+	 */
+	for_each_online_cpu(cpu) {
+		BUG_ON(cpu != (cpu_logical_map(cpu) & 0xff));
+		t = &bL_threads[cpu];
+		task = t->task;
+		t->task = NULL;
+		if (IS_ERR_OR_NULL(task))
+			continue;
+		kthread_stop(task);
+		/* no more switch may happen on this CPU at this point */
+		cluster = (cpu_logical_map(cpu) >> 8) & 0xff;
+		if (cluster == bL_switcher_cpu_original_cluster[cpu])
+			continue;
+		init_completion(&t->started);
+		t->wanted_cluster = bL_switcher_cpu_original_cluster[cpu];
+		task = bL_switcher_thread_create(cpu, t);
+		if (!IS_ERR(task)) {
+			wait_for_completion(&t->started);
+			kthread_stop(task);
+			cluster = (cpu_logical_map(cpu) >> 8) & 0xff;
+			if (cluster == bL_switcher_cpu_original_cluster[cpu])
+				continue;
+		}
+		/* If execution gets here, we're in trouble. */
+		pr_crit("%s: unable to restore original cluster for CPU %d\n",
+			__func__, cpu);
+		for_each_cpu(i, &bL_switcher_removed_logical_cpus) {
+			if ((cpu_logical_map(i) & 0xff) != cpu)
+				continue;
+			pr_crit("%s: CPU %d can't be restored\n",
+				__func__, i);
+			cpumask_clear_cpu(i, &bL_switcher_removed_logical_cpus);
+			break;
+		}
+	}
+
+	bL_switcher_restore_cpus();
+	bL_switcher_trace_trigger();
+
+	bL_activation_notify(BL_NOTIFY_POST_DISABLE);
+
+out:
+	cpu_hotplug_driver_unlock();
+	mutex_unlock(&bL_switcher_activation_lock);
+}
+
+static ssize_t bL_switcher_active_show(struct kobject *kobj,
+		struct kobj_attribute *attr, char *buf)
+{
+	return sprintf(buf, "%u\n", bL_switcher_active);
+}
+
+static ssize_t bL_switcher_active_store(struct kobject *kobj,
+		struct kobj_attribute *attr, const char *buf, size_t count)
+{
+	int ret;
+
+	switch (buf[0]) {
+	case '0':
+		bL_switcher_disable();
+		ret = 0;
+		break;
+	case '1':
+		ret = bL_switcher_enable();
+		break;
+	default:
+		ret = -EINVAL;
+	}
+
+	return (ret >= 0) ? count : ret;
+}
+
+static ssize_t bL_switcher_trace_trigger_store(struct kobject *kobj,
+		struct kobj_attribute *attr, const char *buf, size_t count)
+{
+	int ret = bL_switcher_trace_trigger();
+
+	return ret ? ret : count;
+}
+
+static struct kobj_attribute bL_switcher_active_attr =
+	__ATTR(active, 0644, bL_switcher_active_show, bL_switcher_active_store);
+
+static struct kobj_attribute bL_switcher_trace_trigger_attr =
+	__ATTR(trace_trigger, 0200, NULL, bL_switcher_trace_trigger_store);
+
+static struct attribute *bL_switcher_attrs[] = {
+	&bL_switcher_active_attr.attr,
+	&bL_switcher_trace_trigger_attr.attr,
+	NULL,
+};
+
+static struct attribute_group bL_switcher_attr_group = {
+	.attrs = bL_switcher_attrs,
+};
+
+static struct kobject *bL_switcher_kobj;
+
+static int __init bL_switcher_sysfs_init(void)
+{
+	int ret;
+
+	bL_switcher_kobj = kobject_create_and_add("bL_switcher", kernel_kobj);
+	if (!bL_switcher_kobj)
+		return -ENOMEM;
+	ret = sysfs_create_group(bL_switcher_kobj, &bL_switcher_attr_group);
+	if (ret)
+		kobject_put(bL_switcher_kobj);
+	return ret;
+}
+
+#endif  /* CONFIG_SYSFS */
+
+bool bL_switcher_get_enabled(void)
+{
+	mutex_lock(&bL_switcher_activation_lock);
+
+	return bL_switcher_active;
+}
+EXPORT_SYMBOL_GPL(bL_switcher_get_enabled);
+
+void bL_switcher_put_enabled(void)
+{
+	mutex_unlock(&bL_switcher_activation_lock);
+}
+EXPORT_SYMBOL_GPL(bL_switcher_put_enabled);
+
+/*
+ * Veto any CPU hotplug operation while the switcher is active.
+ * We're just not ready to deal with that given the trickery involved.
+ */
+static int bL_switcher_hotplug_callback(struct notifier_block *nfb,
+					unsigned long action, void *hcpu)
+{
+	switch (action) {
+	case CPU_UP_PREPARE:
+	case CPU_DOWN_PREPARE:
+		if (bL_switcher_active)
+			return NOTIFY_BAD;
+	}
+	return NOTIFY_DONE;
+}
+
+static struct notifier_block bL_switcher_hotplug_notifier = {
+	&bL_switcher_hotplug_callback, NULL, 0 };
+
+static bool no_bL_switcher;
+core_param(no_bL_switcher, no_bL_switcher, bool, 0644);
+
+static int __init bL_switcher_init(void)
+{
+	int ret;
+	struct device_node *dn;
+
+	/*
+	 * We don't want to set up the bL switcher if the machine doesn't
+	 * support bL, so use the presence of a CCI to indicate whether or
+	 * not bL is supported on this device.
+	 */
+	dn = of_find_compatible_node(NULL, NULL, "arm,cci-400");
+	if (!dn)
+		return 0;
+	of_node_put(dn);
+
+	if (MAX_NR_CLUSTERS != 2) {
+		pr_err("%s: only dual cluster systems are supported\n",
+		       __func__);
+		return -EINVAL;
+	}
+
+	register_cpu_notifier(&bL_switcher_hotplug_notifier);
+
+	if (!no_bL_switcher) {
+		ret = bL_switcher_enable();
+		if (ret)
+			return ret;
+	}
+
+#ifdef CONFIG_SYSFS
+	ret = bL_switcher_sysfs_init();
+	if (ret)
+		pr_err("%s: unable to create sysfs entry\n", __func__);
+#endif
+
 	return 0;
 }
+
+late_initcall(bL_switcher_init);

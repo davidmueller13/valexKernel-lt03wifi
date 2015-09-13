@@ -7,4 +7,4 @@ __PARAMS_PHYS	:= $(shell /bin/bash -c 'printf "0x%08x" \
 zreladdr-y	+= $(__ZRELADDR)
 params_phys-y	:= $(__PARAMS_PHYS)
 
-dtb-$(CONFIG_MACH_EXYNOS5_DT) += exynos5410-smdk5410.dtb
+dtb-$(CONFIG_MACH_EXYNOS5_DT) += exynos5420-universal5420.dtb

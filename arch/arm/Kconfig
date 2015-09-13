@@ -1617,9 +1617,24 @@ config HAVE_ARM_TWD
 	help
 	  This options enables support for the ARM timer and watchdog unit
 
+config MCPM
+	bool "Multi-Cluster Power Management"
+	depends on CPU_V7 && SMP
+	help
+	  This option provides the common power management infrastructure
+	  for (multi-)cluster based systems, such as big.LITTLE based
+	  systems.
+
+config BIG_LITTLE
+	bool "big.LITTLE support (Experimental)"
+	depends on CPU_V7 && SMP
+	select MCPM
+	help
+	  This option enables support for the big.LITTLE architecture.
+
 config BL_SWITCHER
-	bool "big.LITTLE switcher support (experimental)"
-	depends on CPU_V7 && EXPERIMENTAL
+	bool "big.LITTLE switcher support"
+	depends on BIG_LITTLE && MCPM && HOTPLUG_CPU
 	select CPU_PM
 	select ARM_CPU_SUSPEND
 	help
@@ -1628,8 +1643,8 @@ config BL_SWITCHER
 	  and a cluster of A7's in a big.LITTLE system.
 
 config BL_SWITCHER_DUMMY_IF
-	bool "Simple big.LITTLE switcher user interface"
-	depends on BL_SWITCHER
+	tristate "Simple big.LITTLE switcher user interface"
+	depends on BL_SWITCHER && DEBUG_KERNEL
 	help
 	  This is a simple and dummy char dev interface to control
 	  the big.LITTLE switcher core code.  It is meant for

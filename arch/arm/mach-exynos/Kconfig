@@ -1228,12 +1228,12 @@ config MACH_EXYNOS4_DT
 config MACH_EXYNOS5_DT
 	bool "SAMSUNG EXYNOS5 Machine using device tree"
 	depends on ARCH_EXYNOS5
-	select SOC_EXYNOS5410
+	select SOC_EXYNOS5420
 	select USE_OF
 	select ARM_AMBA
 	help
-	  Machine support for Samsung Exynos4 machine with device tree enabled.
-	  Select this if a fdt blob is available for the EXYNOS4 SoC based board.
+	  Machine support for Samsung Exynos5 machine with device tree enabled.
+	  Select this if a fdt blob is available for the EXYNOS5 SoC based board.
 
 config EXYNOS5_DEV_GSC
 	bool

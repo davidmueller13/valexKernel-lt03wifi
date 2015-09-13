@@ -159,4 +159,7 @@ source "drivers/ice4_fpga/Kconfig"
 source "drivers/secfilter/Kconfig"
 
 source "drivers/irqchip/Kconfig"
+
+source "drivers/bus/Kconfig"
+
 endmenu

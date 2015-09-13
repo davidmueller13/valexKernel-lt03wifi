@@ -507,29 +507,6 @@ void exynos5_restart(char mode, const char *cmd)
 }
 
 #define REG_CPU_STATE_ADDR	(S5P_VA_SYSRAM_NS + 0x28)
-
-void set_boot_flag(unsigned int cpu, unsigned int mode)
-{
-	unsigned int tmp;
-
-	tmp = __raw_readl(REG_CPU_STATE_ADDR + (cpu * 4));
-
-	if (mode & BOOT_MODE_MASK)
-		tmp &= ~BOOT_MODE_MASK;
-
-	tmp |= mode;
-	__raw_writel(tmp, REG_CPU_STATE_ADDR + (cpu * 4));
-}
-
-void clear_boot_flag(unsigned int cpu, unsigned int mode)
-{
-	unsigned int tmp;
-
-	tmp = __raw_readl(REG_CPU_STATE_ADDR + (cpu * 4));
-	tmp &= ~mode;
-	__raw_writel(tmp, REG_CPU_STATE_ADDR + (cpu * 4));
-}
-
 #define REG_GIC_STATE_ADDR	(S5P_VA_SYSRAM_NS + 0x38)
 
 unsigned int read_gic_flag(unsigned int cpu)
@@ -851,13 +828,6 @@ static void __init combiner_init(unsigned int combiner_nr, void __iomem *base,
 	}
 }
 
-#ifdef CONFIG_OF
-static const struct of_device_id exynos4_dt_irq_match[] = {
-	{ .compatible = "arm,cortex-a9-gic", .data = gic_of_init, },
-	{},
-};
-#endif
-
 static inline void __combiner_init(int combiner_gr, int irq)
 {
 	combiner_init(combiner_gr, (void __iomem *)S5P_VA_COMBINER(combiner_gr),
@@ -906,12 +876,7 @@ void __init exynos5_init_irq(void)
 {
 	int irq;
 
-#ifdef CONFIG_OF
-	irqchip_init();
-	of_irq_init(exynos4_dt_irq_match);
-#else
 	gic_init(0, IRQ_PPI(0), S5P_VA_GIC_DIST, S5P_VA_GIC_CPU);
-#endif
 	gic_arch_extn.irq_set_wake = s3c_irq_wake;
 
 	for (irq = 0; irq < EXYNOS5_MAX_COMBINER_NR; irq++)

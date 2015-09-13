@@ -15,14 +15,14 @@
 #include <linux/delay.h>
 #include <linux/kthread.h>
 #include <linux/sort.h>
-
 #include <linux/fs.h>
+#include <linux/buffer_head.h>
+#include <linux/suspend.h>
+
 #include <asm/segment.h>
 #include <asm/uaccess.h>
-#include <linux/buffer_head.h>
 
 #include <mach/cpufreq.h>
-#include <linux/suspend.h>
 
 #define	COLD_THRESHOLD	20
 #define NORMALMAX_FREQ	1900000
@@ -37,6 +37,7 @@ struct cpu_load_info {
 };
 
 static DEFINE_PER_CPU(struct cpu_load_info, cur_cpu_info);
+static DEFINE_MUTEX(cpufreq_lock);
 static DEFINE_MUTEX(dm_hotplug_lock);
 
 static int cpu_util[NR_CPUS];
