@@ -386,17 +386,17 @@ int notrace __cci_control_port_by_index(u32 port, bool enable)
 }
 EXPORT_SYMBOL_GPL(__cci_control_port_by_index);
 
-static const struct cci_nb_ports cci400_ports = {
+static struct cci_nb_ports cci400_ports = {
 	.nb_ace = 2,
 	.nb_ace_lite = 3
 };
 
-static const struct of_device_id arm_cci_matches[] = {
+static struct of_device_id arm_cci_matches[] = {
 	{.compatible = "arm,cci-400", .data = &cci400_ports },
 	{},
 };
 
-static const struct of_device_id arm_cci_ctrl_if_matches[] = {
+static struct of_device_id arm_cci_ctrl_if_matches[] = {
 	{.compatible = "arm,cci-400-ctrl-if", },
 	{},
 };

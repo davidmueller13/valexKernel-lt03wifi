@@ -77,36 +77,6 @@ void __weak panic_smp_self_stop(void)
  *
  *	This function never returns.
  */
-#ifdef CONFIG_BL_SWITCHER
-#include <mach/regs-pmu.h>
-#include <linux/io.h>
-
-extern void bL_debug_info(void);
-
-void exynos_core_stat(void)
-{
-	unsigned int cluster, cpu, len = 0;
-	char buf[72];
-
-	len += snprintf(buf, sizeof(buf) - len, "BL Core Status:\n");
-	len += snprintf(buf + len, sizeof(buf) - len, "      0 1 2 3 L2\n");
-	for (cluster = 0; cluster < 2; cluster++) {
-		for_each_present_cpu(cpu) {
-			unsigned int cpuid = cluster ? 4 : 0;
-			if (cpu == 0)
-				len += snprintf(buf + len, sizeof(buf) - len,
-					"%s :", cluster ? " A7" : "A15");
-			len += snprintf(buf + len, sizeof(buf) - len, " %d",
-				__raw_readl(EXYNOS_ARM_CORE_STATUS(cpu + cpuid))
-				& 0x3 ? 1 : 0);
-		}
-		len += snprintf(buf + len, sizeof(buf) - len, "  %d\n",
-				__raw_readl(EXYNOS_COMMON_STATUS(cluster))
-				& 0x3 ? 1 : 0);
-	}
-	printk(KERN_EMERG "%s", buf);
-}
-#endif
 
 void panic(const char *fmt, ...)
 {
@@ -143,10 +113,6 @@ void panic(const char *fmt, ...)
 	vsnprintf(buf, sizeof(buf), fmt, args);
 	va_end(args);
 	printk(KERN_EMERG "Kernel panic - not syncing: %s\n",buf);
-#ifdef CONFIG_BL_SWITCHER
-	bL_debug_info();
-	exynos_core_stat();
-#endif
 #ifdef CONFIG_DEBUG_BUGVERBOSE
 	/*
 	 * Avoid nested stack-dumping if a panic occurs during oops processing
