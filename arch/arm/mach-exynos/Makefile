@@ -219,6 +219,7 @@ obj-$(CONFIG_MACH_UNIVERSAL5420)	+= board-universal5420-wlan.o
 obj-y					+= dev-uart.o
 obj-$(CONFIG_ARCH_EXYNOS)		+= dev-audio.o
 obj-$(CONFIG_EXYNOS4_DEV_AHCI)		+= dev-ahci.o
+obj-$(CONFIG_EXYNOS_DEV_DRM)		+= dev-drm.o
 obj-$(CONFIG_EXYNOS_DEV_DWMCI)		+= dev-dwmci.o
 obj-$(CONFIG_EXYNOS4_DEV_FIMC_IS)	+= dev-fimc-is.o
 obj-$(CONFIG_EXYNOS5_DEV_FIMC_IS)	+= dev-fimc-is.o
