@@ -54,6 +54,11 @@ obj-$(CONFIG_SAMSUNG_PM_CHECK)	+= pm-check.o
 
 obj-$(CONFIG_SAMSUNG_WAKEMASK)	+= wakeup-mask.o
 
+obj-$(CONFIG_S5P_PM)		+= s5p-pm.o s5p-irq-pm.o
+obj-$(CONFIG_S5P_SLEEP)		+= s5p-sleep.o
+plus_sec := $(call as-instr,.arch_extension sec,+sec)
+AFLAGS_s5p-sleep.o :=-Wa,-march=armv7-a$(plus_sec)
+
 # PWM support
 
 obj-$(CONFIG_HAVE_PWM)		+= pwm.o
