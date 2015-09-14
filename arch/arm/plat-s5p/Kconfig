@@ -23,46 +23,6 @@ config PLAT_S5P
 	help
 	  Base platform code for Samsung's S5P series SoC.
 
-config S5P_DEV_JPEG
-	bool
-	help
-	  Compile in platform device definitions for JPEG codec
-
-config S5P_DEV_G2D
-	bool
-	help
-	  Compile in platform device definitions for G2D device
-
-config S5P_DEV_FIMD0
-	bool
-	help
-	  Compile in platform device definitions for FIMD controller 0
-
-config S5P_DEV_FIMD1
-	bool
-	help
-	  Compile in platform device definitions for FIMD controller 1
-
-config S5P_DEV_I2C_HDMIPHY
-	bool
-	help
-	  Compile in platform device definitions for I2C HDMIPHY controller
-
-config S5P_DEV_ONENAND
-	bool
-	help
-	  Compile in platform device definition for OneNAND controller
-
-config S5P_DEV_TV
-	bool
-	help
-	  Compile in platform device definition for TV interface
-
-config S5P_DEV_USB_EHCI
-	bool
-	help
-	  Compile in platform device definition for USB EHCI
-
 config S5P_DEV_ACE
 	bool
 	help
