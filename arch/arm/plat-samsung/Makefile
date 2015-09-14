@@ -36,6 +36,7 @@ obj-y				+= platformdata.o
 
 obj-y				+= devs.o
 obj-y				+= dev-uart.o
+obj-$(CONFIG_S5P_DEV_UART)	+= s5p-dev-uart.o
 
 obj-$(CONFIG_FB_MIPI_DSIM)	+= dev-mipidsim.o
 obj-$(CONFIG_S5P_DEV_DP)	+= dev-dp.o
