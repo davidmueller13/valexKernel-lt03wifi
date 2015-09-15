@@ -31,8 +31,8 @@ static struct resource s5p_uart0_resource[] = {
 };
 
 static struct resource s5p_uart1_resource[] = {
-+	[0] = DEFINE_RES_MEM(S5P_PA_UART1, S5P_SZ_UART),
-+	[1] = DEFINE_RES_IRQ(IRQ_UART1),
+	[0] = DEFINE_RES_MEM(S5P_PA_UART1, S5P_SZ_UART),
+	[1] = DEFINE_RES_IRQ(IRQ_UART1),
 };
 
 static struct resource s5p_uart2_resource[] = {
