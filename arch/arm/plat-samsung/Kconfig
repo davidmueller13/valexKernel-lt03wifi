@@ -394,6 +394,8 @@ config S3C24XX_PWM
 
 config S5P_SETUP_MIPIPHY
 	bool
+	depends on (VIDEO_S5P_MIPI_CSIS || VIDEO_EXYNOS_MIPI_CSIS)
+	default y
 	help
 	  Compile in common setup code for MIPI-CSIS and MIPI-DSIM devices
 
