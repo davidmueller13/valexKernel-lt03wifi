@@ -35,20 +35,6 @@ struct arm_delay_ops arm_delay_ops = {
 };
 
 #ifdef ARCH_HAS_READ_CURRENT_TIMER
-
-static const struct delay_timer *delay_timer;
-static bool delay_calibrated;
-
-int read_current_timer(unsigned long *timer_val)
-{
-	if (!delay_timer)
-		return -ENXIO;
-
-	*timer_val = delay_timer->read_current_timer();
-	return 0;
-}
-EXPORT_SYMBOL_GPL(read_current_timer);
-
 static void __timer_delay(unsigned long cycles)
 {
 	cycles_t start = get_cycles();
